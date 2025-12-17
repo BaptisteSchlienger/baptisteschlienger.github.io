@@ -1,0 +1,456 @@
+:root {
+    --color-bg: #fafafa;
+    /* Almost White */
+    --color-text: #222222;
+    /* Almost Black */
+    --color-muted: #555555;
+
+    --color-cyan: #0081a7;
+    --color-teal: #00afb9;
+    --color-salmon: #f07167;
+    --color-cream: #fdfcdc;
+    --color-peach: #fed9b7;
+
+    --font-serif: 'Playfair Display', serif;
+    --font-sans: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.7;
+    overflow-x: hidden;
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--font-serif);
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+a {
+    color: var(--color-text);
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+a:hover {
+    color: var(--color-teal);
+}
+
+.logo {
+    font-family: var(--font-serif);
+    font-weight: 700;
+    font-size: 1.2rem;
+    letter-spacing: 0.5px;
+}
+
+.nav-links {
+    display: flex;
+    gap: 2.5rem;
+    list-style: none;
+}
+
+.hamburger {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 10px;
+    z-index: 1001;
+}
+
+.hamburger span {
+    display: block;
+    width: 25px;
+    height: 2px;
+    background-color: var(--color-text);
+    margin: 5px 0;
+    transition: all 0.3s;
+}
+
+/* Mobile Menu Open Styles */
+.nav-links.active {
+    display: flex;
+    /* Override display: none from media query or default behavior */
+}
+
+/* Header */
+#site-header {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    padding: 1.5rem 3rem;
+    background: rgba(250, 250, 250, 0.95);
+    z-index: 1000;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.nav-links li a {
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+.nav-links li a.active,
+.nav-links li a:hover {
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-salmon);
+}
+
+/* Sections */
+section {
+    padding: 120px 2rem;
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.section-header {
+    text-align: center;
+    margin-bottom: 4rem;
+}
+
+.section-header h2 {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.separator {
+    width: 60px;
+    height: 3px;
+    background: var(--color-salmon);
+    margin: 0 auto;
+}
+
+/* Hero */
+.hero-section {
+    position: relative;
+    height: 100vh;
+    width: 100%;
+    max-width: none;
+    display: flex;
+    /* Ensure centering works */
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    overflow: hidden;
+    background: #fafafa;
+    /* Fallback */
+}
+
+#glitch-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    /* Below content */
+    opacity: 1;
+    /* Slight transparency to blend with white bg if needed */
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    /* Transparent background to see the ASCII art clearly */
+    background: transparent;
+    padding: 3rem 4rem;
+    border: none;
+    box-shadow: none;
+    max-width: 900px;
+    margin: 0 auto;
+    /* Push content down to sit below the centered ASCII art */
+    margin-top: 15vh;
+}
+
+/* Removed H1 styles as it's now ASCII */
+
+.hero-content .subtitle {
+    font-family: var(--font-sans);
+    font-size: 1.2rem;
+    color: var(--color-muted);
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 0 5px #ffffff, 0 0 10px #ffffff, 0 0 20px #ffffff;
+    font-weight: 500;
+    /* Slightly bolder for legibility */
+}
+
+.location {
+    font-family: var(--font-mono);
+    font-size: 1.0rem;
+    font-weight: 500;
+    color: var(--color-cyan);
+    margin-top: 0.5rem;
+    text-shadow: 0 0 5px #ffffff, 0 0 10px #ffffff, 0 0 20px #ffffff;
+}
+
+.hero-socials {
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    position: relative;
+    z-index: 2;
+    /* Ensure clickable above canvas */
+}
+
+.hero-nav-icon {
+    font-size: 1.2rem;
+    color: var(--color-cyan);
+    transition: all 0.3s ease;
+    opacity: 1;
+}
+
+.hero-nav-icon:hover {
+    color: var(--color-salmon);
+    transform: translateY(-3px);
+    opacity: 1;
+}
+
+/* About */
+.about-text {
+    font-size: 1.2rem;
+    text-align: center;
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--color-muted);
+}
+
+#glitch-text {
+    font-family: var(--font-mono);
+}
+
+/* Timeline */
+.timeline {
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+    padding-left: 2rem;
+    margin-left: 1rem;
+}
+
+.job-card {
+    margin-bottom: 3rem;
+    position: relative;
+}
+
+.job-card::before {
+    content: '';
+    position: absolute;
+    left: -2.5rem;
+    top: 1.2rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    background: var(--color-bg);
+    border: 2px solid var(--color-salmon);
+    border-radius: 50%;
+}
+
+.job-card h3 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+}
+
+.job-card .meta {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-cyan);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+}
+
+.job-card p {
+    color: var(--color-muted);
+}
+
+/* Skills */
+.skills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 3rem;
+}
+
+.skill-category h3 {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding-bottom: 0.5rem;
+}
+
+.skill-category p {
+    font-family: var(--font-mono);
+    color: var(--color-muted);
+    font-size: 0.9rem;
+}
+
+/* Education */
+.edu-item {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.edu-item h3 {
+    font-size: 1.8rem;
+}
+
+.edu-item p {
+    color: var(--color-muted);
+    font-style: italic;
+}
+
+/* Contact */
+#contact {
+    position: relative;
+    overflow: hidden;
+    /* Ensure content sits on top */
+}
+
+#contact-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.contact-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+}
+
+.cta-button {
+    display: inline-block;
+    padding: 0.8rem 2rem;
+    border: 1px solid var(--color-text);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.social-links-container {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.cta-button:hover {
+    background: var(--color-salmon);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    color: #fff;
+    border-color: var(--color-salmon);
+}
+
+footer {
+    padding: 3rem;
+    text-align: center;
+    background: #f4f4f4;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+    .hero-content h1 {
+        font-size: 3rem;
+    }
+
+    .hero-content {
+        margin-top: 30vh;
+        /* Push further down for taller stacked ASCII */
+        padding: 1rem;
+    }
+
+    #site-header {
+        padding: 1rem 1.5rem;
+    }
+
+    /* Ensure nav inherits 100% width and flex properties properly */
+
+    .hamburger {
+        display: block;
+    }
+
+    .nav-links {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        background: var(--color-bg);
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        gap: 1.5rem;
+        box-shadow: 0 5px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-links.active {
+        display: flex;
+        animation: slideDown 0.3s ease-out forwards;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    section {
+        padding: 80px 1rem;
+    }
+
+    /* Timeline adjustments for mobile */
+    .timeline {
+        margin-left: 0;
+        padding-left: 1.5rem;
+    }
+
+    .job-card::before {
+        left: -1.85rem;
+        /* Aligns dot with the reduced border padding */
+    }
+
+    .job-card {
+        word-wrap: break-word;
+    }
+}
