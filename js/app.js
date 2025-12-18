@@ -3,7 +3,32 @@ document.addEventListener('DOMContentLoaded', () => {
     initContactBackground();
     initTextGlitch();
     initLanguage();
+    initSmoothScroll();
 });
+
+function initSmoothScroll() {
+    document.querySelectorAll('a[href^="#"]').forEach(link => {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            const targetId = this.getAttribute('href').substring(1);
+            const targetElement = document.getElementById(targetId);
+
+            if (targetElement) {
+                const header = document.getElementById('site-header');
+                const headerHeight = header ? header.offsetHeight : 0;
+                const targetPosition = targetElement.offsetTop - headerHeight;
+
+                window.scrollTo({
+                    top: targetPosition,
+                    behavior: 'smooth'
+                });
+
+                // Update URL (optional, keeps native behavior but without jump)
+                history.pushState(null, null, `#${targetId}`);
+            }
+        });
+    });
+}
 
 // Translations
 const translations = {

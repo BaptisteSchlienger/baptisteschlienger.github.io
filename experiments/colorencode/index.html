@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ColorEncode | Baptiste Schlienger Experiments</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono&family=Playfair+Display:wght@700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <header>
+        <a href="../../index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+        <h1>ColorEncode</h1>
+        <p class="subtitle">Translate data into the language of color.</p>
+    </header>
+
+    <main class="container">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="encode">Encode Text</button>
+            <button class="tab-btn" data-tab="decode">Decode Image</button>
+        </div>
+
+        <section id="encode-section" class="tab-content active">
+            <div class="card main-input">
+                <div class="label-row">
+                    <label for="text-input">Input Text</label>
+                    <span id="char-limit" class="limit-info">0 / 5000</span>
+                </div>
+                <textarea id="text-input" maxlength="5000" placeholder="Type something to hide in colors..."></textarea>
+            </div>
+
+            <div class="steps-grid">
+                <div class="card step">
+                    <h3><span class="step-num">01</span> Hex Data</h3>
+                    <div id="hex-display" class="debug-data">Waiting for input...</div>
+                </div>
+                <div class="card step">
+                    <h3><span class="step-num">02</span> Color Chunks</h3>
+                    <div id="chunks-display" class="debug-data">Waiting for input...</div>
+                </div>
+                <div class="card step">
+                    <h3><span class="step-num">03</span> Visual Output</h3>
+                    <div class="canvas-wrapper">
+                        <canvas id="encode-canvas"></canvas>
+                    </div>
+                    <button id="download-btn" class="cta-button" disabled><i class="fas fa-download"></i> Save as
+                        PNG</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="decode-section" class="tab-content">
+            <div class="card main-input">
+                <label for="image-upload">Upload Encoded Image</label>
+                <div class="upload-area" id="drop-zone">
+                    <input type="file" id="image-upload" accept="image/png">
+                    <i class="fas fa-image"></i>
+                    <p>Click or drag & drop a ColorEncode PNG</p>
+                    <div id="decode-error" class="error-msg"></div>
+                </div>
+            </div>
+
+            <div class="steps-grid">
+                <div class="card step">
+                    <h3><span class="step-num">01</span> Extracted Hex</h3>
+                    <div id="extracted-hex" class="debug-data truncate">Awaiting image...</div>
+                    <button id="view-all-btn" class="text-btn" style="display: none;">View All</button>
+                </div>
+                <div class="card step">
+                    <h3><span class="step-num">02</span> Decoded Result</h3>
+                    <div id="decoded-text" class="result-text">Your message will appear here...</div>
+                    <div class="info-note">
+                        <i class="fas fa-info-circle"></i>
+                        Note: Natural photos contain "visual" noise that won't decode into text. This tool only works
+                        with pixel-perfect PNGs created by ColorEncode.
+                    </div>
+                    <button id="copy-btn" class="cta-button secondary" disabled><i class="fas fa-copy"></i> Copy
+                        Result</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
