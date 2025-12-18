@@ -1,20 +1,227 @@
-console.log("Welcome to Baptiste Schlienger's Portfolio.");
-
 document.addEventListener('DOMContentLoaded', () => {
     initGlitchBackground();
     initContactBackground();
     initTextGlitch();
+    initLanguage();
 });
+
+// Translations
+const translations = {
+    en: {
+        "nav.home": "Home",
+        "nav.about": "About",
+        "nav.experience": "Experience",
+        "nav.skills": "Skills",
+        "nav.education": "Education",
+        "nav.contact": "Contact",
+
+        "hero.subtitle": "Full-Stack Developer & Problem Solver",
+        "hero.location": "Bordeaux, France",
+
+        "about.title": "About Me",
+        "about.p1_start": "Passionate ",
+        "about.p1_end": "who loves learning and building new projects. I specialize in algorithm design, optimization, and creating intuitive user experiences.",
+        "about.p2": "Long story short… I love developing, whatever the platform.",
+        "about.roles": ["developer", "website builder", "problem solver", "algorithm designer", "app maker"],
+
+        "exp.title": "Experience",
+        "exp.label.services": "Services:",
+        "exp.label.highlights": "Highlights:",
+        "exp.label.role": "Role:",
+        "exp.label.stack": "Stack:",
+        "exp.label.projects": "Projects:",
+        "exp.label.mission": "Mission:",
+        "exp.label.impact": "Impact:",
+
+        "exp.freelance.title": "Freelance Full-stack Developer",
+        "exp.freelance.meta": "Nov 2017 - Aug 2021 | Tours & Remote",
+        "exp.freelance.services": "Web Development, CMS (Setup + Custom), Chatbot Development, SEO Consulting.",
+        "exp.freelance.highlights": "Bilingual English/French services, leveraging a background in Cyber Security & SEO.",
+
+        "exp.deloitte.title": "Deloitte — Cyber Risk Services",
+        "exp.deloitte.meta": "Apr 2016 - Nov 2017 | Amsterdam, Netherlands",
+        "exp.deloitte.role": "Full-stack Developer within the Ethical Hacking team.",
+        "exp.deloitte.stack": "C#, ASP.NET, AngularJS, HTML5, CSS3, Javascript.",
+        "exp.deloitte.projects": "Hacking as a Service Scanning Tool, Complex Backoffice Systems, Client Portals, Reporting Engines.",
+
+        "exp.multivote.title": "Multivote",
+        "exp.multivote.meta": "Mar 2014 - Dec 2014 | Bordeaux, France",
+        "exp.multivote.role": "API Developer.",
+        "exp.multivote.stack": "Windows Azure, C#, ASP.NET.",
+        "exp.multivote.mission": "Created APIs and optimized algorithm calculation times on large datasets using Azure cloud architecture.",
+
+        "exp.ch.title": "Centre Hospitalier Robert Boulin",
+        "exp.ch.meta": "Aug 2012 - Dec 2012 | Libourne, France",
+        "exp.ch.role": "Web Developer.",
+        "exp.ch.stack": "PHP, Javascript/jQuery, HTML5, CSS3.",
+        "exp.ch.impact": "Created a datacenter visualization tool (VM, CPU, Disk), improving backup processes by 20%.",
+
+        "skills.title": "Skills & Interests",
+        "skills.cat.languages": "Languages",
+        "skills.list.languages": "C, C++, C#, HTML, CSS, Javascript, PHP, SQL, Python, Java, Kotlin",
+        "skills.cat.domains": "Domains",
+        "skills.list.domains": "SEO, Web Security, Ethical Hacking, AI/ML, Cloud Computing, Algorithm Design",
+        "skills.cat.frameworks": "Frameworks & Tools",
+        "skills.list.frameworks": ".Net, AngularJS, NodeJS, Flask, Unity3D, Photoshop, Blender, Git, Docker",
+        "skills.cat.softskills": "Soft Skills",
+        "skills.list.softskills": "Project Management, Team Leading, Business Communication, Adaptability (Fast Learner)",
+        "skills.cat.fluent": "Fluent in",
+        "skills.list.fluent": "French, English, Spanish",
+        "skills.cat.travels": "Travels",
+        "skills.list.travels": "United States, Mexico, Argentina, Peru, Caribbean Islands, Spain, Italy, France, Netherlands",
+
+        "edu.title": "Education",
+        "edu.epitech.title": "EPITECH",
+        "edu.epitech.meta": "2011 - 2016 | Bordeaux & Paris, France",
+        "edu.epitech.degree": "Master in Computer Science and Programming",
+        "edu.epitech.desc": "Project-based pedagogy, solo & group work, learning everything from C programming to Project Management & Team Leading.",
+
+        "edu.ucsd.title": "UCSD",
+        "edu.ucsd.meta": "Jan 2015 - July 2015 | San Diego, California, USA",
+        "edu.ucsd.degree": "Computer Science Engineering Extension",
+        "edu.ucsd.desc": "Technical & Theoretical courses including SEO and Business Communication Skills.",
+
+        "contact.title": "Get In Touch",
+        "contact.subtitle": "Currently looking for freelance missions.",
+        "contact.btn.email": "Email",
+
+        "footer.text": "© 2025 Baptiste Schlienger. Built with 💻 & 🍜."
+    },
+    fr: {
+        "nav.home": "Accueil",
+        "nav.about": "À propos",
+        "nav.experience": "Expériences",
+        "nav.skills": "Compétences",
+        "nav.education": "Formation",
+        "nav.contact": "Contact",
+
+        "hero.subtitle": "Développeur Full-Stack & Problem Solver",
+        "hero.location": "Bordeaux, France",
+
+        "about.title": "À propos",
+        "about.p1_start": "Passionné de ",
+        "about.p1_end": "qui aime apprendre et construire de nouveaux projets. Je me spécialise dans la conception d'algorithmes, l'optimisation et la création d'expériences utilisateur intuitives.",
+        "about.p2": "En bref... J'aime développer, quelle que soit la plateforme.",
+        "about.roles": ["développement en tout genre", "création de sites web", "problèmes à résoudre", "conception d'algorithmes", "création d'applications"],
+
+        "exp.title": "Expériences",
+        "exp.label.services": "Services :",
+        "exp.label.highlights": "Points forts :",
+        "exp.label.role": "Rôle :",
+        "exp.label.stack": "Stack :",
+        "exp.label.projects": "Projets :",
+        "exp.label.mission": "Mission :",
+        "exp.label.impact": "Impact :",
+
+        "exp.freelance.title": "Développeur Full-stack Freelance",
+        "exp.freelance.meta": "Nov 2017 - Aug 2021 | Tours & Remote",
+        "exp.freelance.services": "Développement Web, CMS (Setup + Custom), Chatbots, Consulting SEO.",
+        "exp.freelance.highlights": "Services bilingues Anglais/Français, background en Cyber Sécurité & SEO.",
+
+        "exp.deloitte.title": "Deloitte — Cyber Risk Services",
+        "exp.deloitte.meta": "Avr 2016 - Nov 2017 | Amsterdam, Pays-Bas",
+        "exp.deloitte.role": "Développeur Full-stack au sein de l'équipe Ethical Hacking.",
+        "exp.deloitte.stack": "C#, ASP.NET, AngularJS, HTML5, CSS3, Javascript.",
+        "exp.deloitte.projects": "Outil \"Hacking as a Service\", systèmes Backoffice complexes, Portails Clients, moteurs de Reporting.",
+
+        "exp.multivote.title": "Multivote",
+        "exp.multivote.meta": "Mar 2014 - Déc 2014 | Bordeaux, France",
+        "exp.multivote.role": "Développeur API.",
+        "exp.multivote.stack": "Windows Azure, C#, ASP.NET.",
+        "exp.multivote.mission": "Création d'APIs et optimisation des temps de calcul d'algorithmes sur de gros datasets via Azure.",
+
+        "exp.ch.title": "Centre Hospitalier Robert Boulin",
+        "exp.ch.meta": "Août 2012 - Déc 2012 | Libourne, France",
+        "exp.ch.role": "Développeur Web.",
+        "exp.ch.stack": "PHP, Javascript/jQuery, HTML5, CSS3.",
+        "exp.ch.impact": "Création d'un outil de visualisation de datacenter (VM, CPU, Disque) : process de backup accéléré de 20%.",
+
+        "skills.title": "Compétences & Intérêts",
+        "skills.cat.languages": "Langages",
+        "skills.list.languages": "C, C++, C#, HTML, CSS, Javascript, PHP, SQL, Python, Java, Kotlin",
+        "skills.cat.domains": "Domaines",
+        "skills.list.domains": "SEO, Sécurité Web, Ethical Hacking, AI/ML, Cloud Computing, Algorithmique",
+        "skills.cat.frameworks": "Frameworks & Outils",
+        "skills.list.frameworks": ".Net, AngularJS, NodeJS, Flask, Unity3D, Photoshop, Blender, Git, Docker",
+        "skills.cat.softskills": "Compétences",
+        "skills.list.softskills": "Gestion de Projet, Team Leading, Communication Business, Adaptabilité (Fast Learner)",
+        "skills.cat.fluent": "Langues parlées",
+        "skills.list.fluent": "Français, Anglais, Espagnol",
+        "skills.cat.travels": "Voyages",
+        "skills.list.travels": "États-Unis, Mexique, Argentine, Pérou, Caraïbes, Espagne, Italie, France, Pays-Bas",
+
+        "edu.title": "Formation",
+        "edu.epitech.title": "EPITECH",
+        "edu.epitech.meta": "2011 - 2016 | Bordeaux & Paris, France",
+        "edu.epitech.degree": "Expert en Technologies de l'Information",
+        "edu.epitech.desc": "Pédagogie par projets, travail solo/groupe, apprentissage du C au Management & Team Leading.",
+
+        "edu.ucsd.title": "UCSD",
+        "edu.ucsd.meta": "Jan 2015 - Juil 2015 | San Diego, Californie, USA",
+        "edu.ucsd.degree": "Computer Science Engineering Extension",
+        "edu.ucsd.desc": "Cours techniques & théoriques incluant SEO et Business Communication Skills.",
+
+        "contact.title": "Me Contacter",
+        "contact.subtitle": "Actuellement en recherche de missions freelance.",
+        "contact.btn.email": "Email",
+
+        "footer.text": "© 2025 Baptiste Schlienger. Fait avec 💻 & 🍜."
+    }
+};
+
+let currentLang = 'en';
+
+function initLanguage() {
+    const userLang = navigator.language || navigator.userLanguage;
+    if (userLang.startsWith('fr')) {
+        currentLang = 'fr';
+    } else {
+        currentLang = 'en';
+    }
+
+    updateLanguage(currentLang);
+
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const lang = btn.getAttribute('data-lang');
+            currentLang = lang;
+            updateLanguage(lang);
+        });
+    });
+}
+
+function updateLanguage(lang) {
+    // Implement translations
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[lang][key]) {
+            el.innerText = translations[lang][key];
+        }
+    });
+
+    // Update buttons state
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        if (btn.getAttribute('data-lang') === lang) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Update glitch text context if needed (handled dynamically by next glitch loop)
+}
 
 function initTextGlitch() {
     const el = document.getElementById('glitch-text');
     if (!el) return;
 
-    const phrases = ["developer", "website builder", "problem solver", "algorithm designer", "app maker"];
     let phraseIndex = 0;
     const chars = "!<>-_\\/[]{}—=+*^?#________";
 
     setInterval(() => {
+        // Use phrases based on current language
+        const phrases = translations[currentLang]["about.roles"];
+
         phraseIndex = (phraseIndex + 1) % phrases.length;
         const newPhrase = phrases[phraseIndex];
         const oldPhrase = el.innerText;

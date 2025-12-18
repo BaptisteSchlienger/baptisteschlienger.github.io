@@ -6,18 +6,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baptiste Schlienger | Full-Stack Developer</title>
     <meta name="description"
-        content="Baptiste Schlienger Official Website : Read about my professional experiences or projects, download my resume, contact me">
+        content="Baptiste Schlienger: Full-stack Developer specializing in C#, Web technologies, and Security. Based in Bordeaux, France.">
     <meta name="keywords"
-        content="Baptiste Schlienger, official website, full-stack developer, webdeveloper, Computer Science, Programming, IT expertise">
+        content="Baptiste Schlienger, Full-stack Developer, C#, ASP.NET, Java, Python, Web Security, Bordeaux, Freelance Developer, SEO, AI, ML">
     <meta name="author" content="Baptiste Schlienger">
+    <link rel="canonical" href="https://www.baptiste-schlienger.com" />
 
-    <!-- Open Graph -->
-    <meta property="og:title" content="Baptiste Schlienger: Full-stack Developer">
-    <meta property="og:site_name" content="Baptiste Schlienger">
-    <meta property="og:url" content="https://www.baptiste-schlienger.com">
+    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.baptiste-schlienger.com">
+    <meta property="og:title" content="Baptiste Schlienger | Full-Stack Developer">
     <meta property="og:description"
-        content="Baptiste Schlienger Official Website : Read about my professional experiences or projects, download my resume, contact me">
+        content="Portfolio of Baptiste Schlienger, a passionate Full-Stack Developer specialized in building scalable and secure applications.">
+    <meta property="og:image" content="https://www.baptiste-schlienger.com/assets/images/og-image.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://www.baptiste-schlienger.com">
+    <meta property="twitter:title" content="Baptiste Schlienger | Full-Stack Developer">
+    <meta property="twitter:description"
+        content="Portfolio of Baptiste Schlienger, a passionate Full-Stack Developer specialized in building scalable and secure applications.">
+    <meta property="twitter:image" content="https://www.baptiste-schlienger.com/assets/images/og-image.jpg">
+
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon/favicon-16x16.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="theme-color" content="#ffffff">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,8 +52,26 @@
       "@context": "https://schema.org",
       "@type": "Person",
       "name": "Baptiste Schlienger",
+      "givenName": "Baptiste",
+      "familyName": "Schlienger",
       "jobTitle": "Full-stack Developer",
       "url": "https://www.baptiste-schlienger.com",
+      "description": "Full-stack Developer specializing in C#, ASP.NET, and Web Security with a background in Ethical Hacking.",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Bordeaux",
+        "addressCountry": "France"
+      },
+      "knowsAbout": [
+        "Full-stack Development",
+        "C#",
+        "ASP.NET",
+        "Web Security",
+        "Ethical Hacking",
+        "SEO",
+        "Algorithm Design",
+        "Cloud Computing"
+      ],
       "sameAs": [
         "https://twitter.com/TheBaptman",
         "https://www.facebook.com/baptiste.schlienger",
@@ -51,7 +85,7 @@
 
 <body>
 
-    <header id="site-header">
+    <header id="site-header" role="banner">
         <nav>
             <div class="logo">Baptiste Schlienger</div>
             <button class="hamburger" aria-label="Toggle Menu">
@@ -60,31 +94,38 @@
                 <span></span>
             </button>
             <ul class="nav-links">
-                <li><a href="#home">Home</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#experience">Experience</a></li>
-                <li><a href="#skills">Skills</a></li>
-                <li><a href="#education">Education</a></li>
-                <li><a href="#contact">Contact</a></li>
+                <li><a href="#home" data-i18n="nav.home">Home</a></li>
+                <li><a href="#about" data-i18n="nav.about">About</a></li>
+                <li><a href="#experience" data-i18n="nav.experience">Experience</a></li>
+                <li><a href="#skills" data-i18n="nav.skills">Skills</a></li>
+                <li><a href="#education" data-i18n="nav.education">Education</a></li>
+                <li><a href="#contact" data-i18n="nav.contact">Contact</a></li>
+                <li class="lang-switch-li">
+                    <button class="lang-btn active" data-lang="en">EN</button>
+                    <span class="lang-separator">/</span>
+                    <button class="lang-btn" data-lang="fr">FR</button>
+                </li>
             </ul>
         </nav>
     </header>
 
-    <main>
+    <main role="main">
         <section id="home" class="hero-section">
             <canvas id="glitch-canvas"></canvas>
             <div class="hero-content">
                 <!-- Name is now rendered on canvas as ASCII art -->
-                <p class="subtitle">Full-Stack Developer & Problem Solver</p>
-                <div class="location">Bordeaux, France</div>
+                <p class="subtitle" data-i18n="hero.subtitle">Full-Stack Developer & Problem Solver</p>
+                <div class="location" data-i18n="hero.location">Bordeaux, France</div>
                 <div class="hero-socials">
-                    <a href="https://www.linkedin.com/in/baptisteschlienger/" target="_blank" rel="noopener noreferrer"
-                        class="hero-nav-icon" aria-label="LinkedIn"><i class="fab fa-linkedin"></i></a>
-                    <a href="https://github.com/BaptisteSchlienger/" target="_blank" rel="noopener noreferrer"
+                    <a href="https://www.linkedin.com/in/baptisteschlienger/" target="_blank"
+                        rel="noopener noreferrer me" class="hero-nav-icon" aria-label="LinkedIn"><i
+                            class="fab fa-linkedin"></i></a>
+                    <a href="https://github.com/BaptisteSchlienger/" target="_blank" rel="noopener noreferrer me"
                         class="hero-nav-icon" aria-label="GitHub"><i class="fab fa-github"></i></a>
-                    <a href="https://www.malt.fr/profile/baptisteschlienger" target="_blank" rel="noopener noreferrer"
-                        class="hero-nav-icon" aria-label="Malt"><i class="fas fa-briefcase"></i></a>
-                    <a href="mailto:baptiste.schlienger@gmail.com" class="hero-nav-icon" aria-label="Email"><i
+                    <a href="https://www.malt.fr/profile/baptisteschlienger" target="_blank"
+                        rel="noopener noreferrer me" class="hero-nav-icon" aria-label="Malt"><i
+                            class="fas fa-briefcase"></i></a>
+                    <a href="mailto:baptiste.schlienger@gmail.com" class="hero-nav-icon" aria-label="Email" rel="me"><i
                             class="fas fa-envelope"></i></a>
                 </div>
             </div>
@@ -93,58 +134,68 @@
         <section id="about" class="content-section">
             <!-- No dither image wrapper anymore -->
             <div class="section-header">
-                <h2>About Me</h2>
+                <h2 data-i18n="about.title">About Me</h2>
                 <div class="separator"></div>
             </div>
             <div class="about-grid">
                 <div class="about-text">
-                    <p>Passionate <span id="glitch-text">developer</span><br />
-                        who loves learning and building new projects.
-                        I specialize in algorithm design, optimization, and creating intuitive user experiences.</p>
-                    <p>Long story short… I love developing, whatever the platform.</p>
+                    <p><span data-i18n="about.p1_start">Passionate </span><span id="glitch-text">developer</span><br />
+                        <span data-i18n="about.p1_end">who loves learning and building new projects.
+                            I specialize in algorithm design, optimization, and creating intuitive user
+                            experiences.</span>
+                    </p>
+                    <p data-i18n="about.p2">Long story short… I love developing, whatever the platform.</p>
                 </div>
             </div>
         </section>
 
         <section id="experience" class="content-section">
             <div class="section-header">
-                <h2>Experience</h2>
+                <h2 data-i18n="exp.title">Experience</h2>
                 <div class="separator"></div>
             </div>
             <div class="timeline">
                 <div class="job-card">
-                    <h3>Freelance Full-stack Developer</h3>
-                    <div class="meta">Nov 2017 - Present | Bordeaux & Remote</div>
-                    <p><strong>Services:</strong> Web Development, CMS (Setup + Custom), Chatbot Development, SEO
-                        Consulting.</p>
-                    <p><strong>Highlights:</strong> Bilingual English/French services, leveraging a background in Cyber
-                        Security & SEO.</p>
+                    <h3 data-i18n="exp.freelance.title">Freelance Full-stack Developer</h3>
+                    <div class="meta" data-i18n="exp.freelance.meta">Nov 2017 - Aug 2021 | Tours & Remote</div>
+                    <p><strong data-i18n="exp.label.services">Services:</strong> <span
+                            data-i18n="exp.freelance.services">Web Development, CMS (Setup + Custom), Chatbot
+                            Development, SEO Consulting.</span></p>
+                    <p><strong data-i18n="exp.label.highlights">Highlights:</strong> <span
+                            data-i18n="exp.freelance.highlights">Bilingual English/French services, leveraging a
+                            background in Cyber Security & SEO.</span></p>
                 </div>
                 <div class="job-card">
-                    <h3>Deloitte — Cyber Risk Services</h3>
-                    <div class="meta">Apr 2016 - Nov 2017 | Amsterdam, Netherlands</div>
-                    <p><strong>Role:</strong> Full-stack Developer within the Ethical Hacking team.</p>
-                    <p><strong>Stack:</strong> C#, ASP.NET, AngularJS, HTML5, CSS3, Javascript.</p>
-                    <p><strong>Projects:</strong> Hacking as a Service Scanning Tool, Complex Backoffice Systems, Client
-                        Portals, Reporting Engines.</p>
+                    <h3 data-i18n="exp.deloitte.title">Deloitte — Cyber Risk Services</h3>
+                    <div class="meta" data-i18n="exp.deloitte.meta">Apr 2016 - Nov 2017 | Amsterdam, Netherlands</div>
+                    <p><strong data-i18n="exp.label.role">Role:</strong> <span data-i18n="exp.deloitte.role">Full-stack
+                            Developer within the Ethical Hacking team.</span></p>
+                    <p><strong data-i18n="exp.label.stack">Stack:</strong> <span data-i18n="exp.deloitte.stack">C#,
+                            ASP.NET, AngularJS, HTML5, CSS3, Javascript.</span></p>
+                    <p><strong data-i18n="exp.label.projects">Projects:</strong> <span
+                            data-i18n="exp.deloitte.projects">Hacking as a Service Scanning Tool, Complex Backoffice
+                            Systems, Client Portals, Reporting Engines.</span></p>
                 </div>
                 <div class="job-card">
-                    <h3>Multivote</h3>
-                    <div class="meta">Mar 2014 - Dec 2014 | Bordeaux, France</div>
-                    <p><strong>Role:</strong> API Developer.</p>
-                    <p><strong>Stack:</strong> Windows Azure, C#, ASP.NET.</p>
-                    <p><strong>Mission:</strong> Created APIs and optimized algorithm calculation times on large
-                        datasets
-                        using Azure cloud architecture.</p>
+                    <h3 data-i18n="exp.multivote.title">Multivote</h3>
+                    <div class="meta" data-i18n="exp.multivote.meta">Mar 2014 - Dec 2014 | Bordeaux, France</div>
+                    <p><strong data-i18n="exp.label.role">Role:</strong> <span data-i18n="exp.multivote.role">API
+                            Developer.</span></p>
+                    <p><strong data-i18n="exp.label.stack">Stack:</strong> <span data-i18n="exp.multivote.stack">Windows
+                            Azure, C#, ASP.NET.</span></p>
+                    <p><strong data-i18n="exp.label.mission">Mission:</strong> <span
+                            data-i18n="exp.multivote.mission">Created APIs and optimized algorithm calculation times on
+                            large datasets using Azure cloud architecture.</span></p>
                 </div>
                 <div class="job-card">
-                    <h3>Centre Hospitalier Robert Boulin</h3>
-                    <div class="meta">Aug 2012 - Dec 2012 | Libourne, France</div>
-                    <p><strong>Role:</strong> Web Developer.</p>
-                    <p><strong>Stack:</strong> PHP, Javascript/jQuery, HTML5, CSS3.</p>
-                    <p><strong>Impact:</strong> Created a datacenter visualization tool (VM, CPU, Disk), improving
-                        backup
-                        processes by 20%.</p>
+                    <h3 data-i18n="exp.ch.title">Centre Hospitalier Robert Boulin</h3>
+                    <div class="meta" data-i18n="exp.ch.meta">Aug 2012 - Dec 2012 | Libourne, France</div>
+                    <p><strong data-i18n="exp.label.role">Role:</strong> <span data-i18n="exp.ch.role">Web
+                            Developer.</span></p>
+                    <p><strong data-i18n="exp.label.stack">Stack:</strong> <span data-i18n="exp.ch.stack">PHP,
+                            Javascript/jQuery, HTML5, CSS3.</span></p>
+                    <p><strong data-i18n="exp.label.impact">Impact:</strong> <span data-i18n="exp.ch.impact">Created a
+                            datacenter visualization tool (VM, CPU, Disk), improving backup processes by 20%.</span></p>
                 </div>
             </div>
         </section>
@@ -156,50 +207,56 @@
             </div>
             <div class="skills-grid">
                 <div class="skill-category">
-                    <h3>Languages</h3>
-                    <p>C, C++, C#, HTML, CSS, Javascript, PHP, SQL, Python, Java, Kotlin</p>
+                    <h3 data-i18n="skills.cat.languages">Languages</h3>
+                    <p data-i18n="skills.list.languages">C, C++, C#, HTML, CSS, Javascript, PHP, SQL, Python, Java,
+                        Kotlin</p>
                 </div>
                 <div class="skill-category">
-                    <h3>Domains</h3>
-                    <p>SEO, Web Security, Ethical Hacking, AI/ML, Cloud Computing, Algorithm Design</p>
+                    <h3 data-i18n="skills.cat.domains">Domains</h3>
+                    <p data-i18n="skills.list.domains">SEO, Web Security, Ethical Hacking, AI/ML, Cloud Computing,
+                        Algorithm Design</p>
                 </div>
                 <div class="skill-category">
-                    <h3>Frameworks & Tools</h3>
-                    <p>.Net, AngularJS, NodeJS, Flask, Unity3D, Photoshop, Blender, Git, Docker</p>
+                    <h3 data-i18n="skills.cat.frameworks">Frameworks & Tools</h3>
+                    <p data-i18n="skills.list.frameworks">.Net, AngularJS, NodeJS, Flask, Unity3D, Photoshop, Blender,
+                        Git, Docker</p>
                 </div>
                 <div class="skill-category">
-                    <h3>Soft Skills</h3>
-                    <p>Project Management, Team Leading, Business Communication, Adaptability (Fast Learner)</p>
+                    <h3 data-i18n="skills.cat.softskills">Soft Skills</h3>
+                    <p data-i18n="skills.list.softskills">Project Management, Team Leading, Business Communication,
+                        Adaptability (Fast Learner)</p>
                 </div>
                 <div class="skill-category">
-                    <h3>Fluent in</h3>
-                    <p>French, English, Spanish</p>
+                    <h3 data-i18n="skills.cat.fluent">Fluent in</h3>
+                    <p data-i18n="skills.list.fluent">French, English, Spanish</p>
                 </div>
                 <div class="skill-category">
-                    <h3>Travels</h3>
-                    <p>United States, Mexico, Argentina, Peru, Caribbean Islands, Spain, Italy, France, Netherlands</p>
+                    <h3 data-i18n="skills.cat.travels">Travels</h3>
+                    <p data-i18n="skills.list.travels">United States, Mexico, Argentina, Peru, Caribbean Islands, Spain,
+                        Italy, France, Netherlands</p>
                 </div>
             </div>
         </section>
 
         <section id="education" class="content-section">
             <div class="section-header">
-                <h2>Education</h2>
+                <h2 data-i18n="edu.title">Education</h2>
                 <div class="separator"></div>
             </div>
             <div class="timeline">
                 <div class="job-card">
-                    <h3>EPITECH</h3>
-                    <div class="meta">2011 - 2016 | Bordeaux & Paris, France</div>
-                    <p><strong>Master in Computer Science and Programming</strong></p>
-                    <p>Project-based pedagogy, solo & group work, learning everything from C programming to Project
-                        Management & Team Leading.</p>
+                    <h3 data-i18n="edu.epitech.title">EPITECH</h3>
+                    <div class="meta" data-i18n="edu.epitech.meta">2011 - 2016 | Bordeaux & Paris, France</div>
+                    <p><strong data-i18n="edu.epitech.degree">Master in Computer Science and Programming</strong></p>
+                    <p data-i18n="edu.epitech.desc">Project-based pedagogy, solo & group work, learning everything from
+                        C programming to Project Management & Team Leading.</p>
                 </div>
                 <div class="job-card">
-                    <h3>UCSD</h3>
-                    <div class="meta">Jan 2015 - July 2015 | San Diego, California, USA</div>
-                    <p><strong>Computer Science Engineering Extension</strong></p>
-                    <p>Technical & Theoretical courses including SEO and Business Communication Skills.</p>
+                    <h3 data-i18n="edu.ucsd.title">UCSD</h3>
+                    <div class="meta" data-i18n="edu.ucsd.meta">Jan 2015 - July 2015 | San Diego, California, USA</div>
+                    <p><strong data-i18n="edu.ucsd.degree">Computer Science Engineering Extension</strong></p>
+                    <p data-i18n="edu.ucsd.desc">Technical & Theoretical courses including SEO and Business
+                        Communication Skills.</p>
                 </div>
             </div>
         </section>
@@ -208,12 +265,14 @@
             <canvas id="contact-canvas"></canvas>
             <div class="contact-content">
                 <div class="section-header">
-                    <h2>Get In Touch</h2>
+                    <h2 data-i18n="contact.title">Get In Touch</h2>
                     <div class="separator"></div>
                 </div>
-                <p style="text-align: center; color: var(--color-muted);">Currently looking for freelance missions.</p>
+                <p style="text-align: center; color: var(--color-muted);" data-i18n="contact.subtitle">Currently looking
+                    for freelance missions.</p>
                 <div class="social-links-container">
-                    <a href="mailto:baptiste.schlienger@gmail.com" class="cta-button">Email</a>
+                    <a href="mailto:baptiste.schlienger@gmail.com" class="cta-button"
+                        data-i18n="contact.btn.email">Email</a>
                     <a href="https://www.linkedin.com/in/baptisteschlienger/" class="cta-button" target="_blank"
                         rel="noopener noreferrer">LinkedIn</a>
                     <a href="https://www.malt.fr/profile/baptisteschlienger" class="cta-button" target="_blank"
@@ -226,7 +285,7 @@
     </main>
 
     <footer>
-        <p>© 2025 Baptiste Schlienger. Built with 💻 & 🍜.</p>
+        <p data-i18n="footer.text">© 2025 Baptiste Schlienger. Built with 💻 & 🍜.</p>
     </footer>
 
     <script src="js/app.js"></script>

@@ -8,8 +8,6 @@
     --color-cyan: #0081a7;
     --color-teal: #00afb9;
     --color-salmon: #f07167;
-    --color-cream: #fdfcdc;
-    --color-peach: #fed9b7;
 
     --font-serif: 'Playfair Display', serif;
     --font-sans: 'Inter', sans-serif;
@@ -55,11 +53,6 @@ a:hover {
     letter-spacing: 0.5px;
 }
 
-.nav-links {
-    display: flex;
-    gap: 2.5rem;
-    list-style: none;
-}
 
 .hamburger {
     display: none;
@@ -103,6 +96,12 @@ nav {
     width: 100%;
 }
 
+.nav-links {
+    display: flex;
+    gap: 2.5rem;
+    list-style: none;
+}
+
 .nav-links li a {
     font-size: 0.95rem;
     text-transform: uppercase;
@@ -110,6 +109,41 @@ nav {
     font-weight: 400;
     font-size: 0.8rem;
     color: var(--color-muted);
+}
+
+.lang-switch-li {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    color: var(--color-muted);
+    font-weight: 400;
+}
+
+.lang-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    /* Inherit muted color */
+    padding: 0;
+    transition: color 0.3s;
+    text-transform: uppercase;
+}
+
+.lang-btn:hover,
+.lang-btn.active {
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+.lang-separator {
+    font-size: 0.8rem;
+    color: var(--color-muted);
+    opacity: 0.5;
 }
 
 .nav-links li a.active,
@@ -307,20 +341,6 @@ section {
     font-size: 0.9rem;
 }
 
-/* Education */
-.edu-item {
-    text-align: center;
-    margin-bottom: 3rem;
-}
-
-.edu-item h3 {
-    font-size: 1.8rem;
-}
-
-.edu-item p {
-    color: var(--color-muted);
-    font-style: italic;
-}
 
 /* Contact */
 #contact {
