@@ -123,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const guessInput = document.getElementById('guess-input');
     const submitBtn = document.getElementById('submit-guess');
     const skipBtn = document.getElementById('skip-try');
+    const giveUpBtn = document.getElementById('give-up');
     const feedback = document.getElementById('feedback');
     const timerVal = document.getElementById('timer-val');
     const scoreVal = document.getElementById('score-val');
@@ -156,8 +157,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show/Hide skip button based on mode
         if (gameMode === 'tries') {
             skipBtn.style.display = 'block';
+            giveUpBtn.style.display = 'none';
         } else {
             skipBtn.style.display = 'none';
+            giveUpBtn.style.display = 'block';
         }
 
         showScreen('game');
@@ -355,7 +358,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const guess = guessInput.value.trim().toLowerCase();
         const correct = currentMovie.title.trim().toLowerCase();
 
-        const simplify = (str) => str.replace(/[:.,!?'\s]/g, '').replace(/^the/, '');
+        const romanToArabic = {
+            'i': '1', 'ii': '2', 'iii': '3', 'iv': '4', 'v': '5',
+            'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'
+        };
+
+        const simplify = (str) => {
+            let s = str.toLowerCase();
+            // Remove common suffixes/markers that users often omit
+            s = s.replace(/\b(part|vol|volume|episode|chapter|book|phase)\b/g, '');
+            // Normalize Roman Numerals to digits (I -> 1, II -> 2, etc.)
+            // We search for stand-alone roman numerals
+            Object.keys(romanToArabic).forEach(roman => {
+                const regex = new RegExp(`\\b${roman}\\b`, 'g');
+                s = s.replace(regex, romanToArabic[roman]);
+            });
+            // Standard cleanup
+            return s.replace(/[:.,!?'\s-]/g, '').replace(/^the/, '');
+        };
 
         if (simplify(guess) === simplify(correct)) {
             handleCorrect();
@@ -494,6 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Events
     submitBtn.addEventListener('click', checkAnswer);
     skipBtn.addEventListener('click', () => handleWrong(true));
+    giveUpBtn.addEventListener('click', () => endGame(false));
     guessInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') checkAnswer();
     });
