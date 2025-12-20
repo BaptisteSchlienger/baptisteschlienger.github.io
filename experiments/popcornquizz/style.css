@@ -432,7 +432,7 @@ canvas {
 
 /* Result Screen */
 .result-card {
-    padding: 4rem 2rem;
+    padding: 1.5rem;
     text-align: center;
     position: relative;
     overflow: hidden;
@@ -477,85 +477,110 @@ canvas {
     }
 }
 
+.result-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    border-radius: 16px;
+}
+
 .result-icon {
-    font-size: 4rem;
+    font-size: 2.5rem;
     color: var(--color-popcorn);
-    margin-bottom: 2rem;
+}
+
+.result-titles {
+    text-align: left;
+}
+
+.result-titles h2 {
+    font-size: 1.2rem;
+    margin-bottom: 0.2rem;
+    color: var(--color-muted);
 }
 
 .final-score {
-    margin-bottom: 2rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    align-items: flex-start;
+    gap: 0.2rem;
 }
 
 .final-score .label {
     text-transform: uppercase;
     color: var(--color-muted);
-    font-size: 0.8rem;
-    letter-spacing: 2px;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
 }
 
 .final-score .value {
-    font-size: 4rem;
+    font-size: 2rem;
     font-weight: 900;
     font-family: var(--font-serif);
     color: var(--color-accent);
 }
 
-.final-movie-reveal {
-    margin: 2rem 0;
+.result-details {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+    align-items: flex-start;
+}
+
+.final-movie-reveal {
+    flex-shrink: 0;
 }
 
 .final-movie-reveal img {
-    max-width: 150px;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    max-width: 240px;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.final-movie-reveal h3 {
+.final-movie-content {
+    flex: 1;
+}
+
+.final-movie-content h3 {
     font-family: var(--font-serif);
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     color: var(--color-popcorn);
+    margin-bottom: 0.5rem;
 }
 
 #result-message {
-    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
     color: var(--color-muted);
 }
 
 .final-movie-info {
-    margin: 0 0 3rem;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    text-align: left;
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
+    gap: 1rem;
 }
 
 .final-plot {
-    font-size: 0.95rem;
-    line-height: 1.6;
+    font-size: 0.85rem;
+    line-height: 1.4;
     color: rgba(255, 255, 255, 0.9);
     background: rgba(255, 255, 255, 0.03);
-    padding: 1rem;
-    border-radius: 12px;
+    padding: 0.8rem;
+    border-radius: 10px;
     border-left: 3px solid var(--color-accent);
 }
 
 .final-hints {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.8rem;
-    justify-content: center;
+    gap: 0.5rem;
+    justify-content: flex-start;
 }
 
 .final-hints .hint-item {
@@ -563,15 +588,39 @@ canvas {
     transform: none;
     background: rgba(255, 255, 255, 0.08);
     pointer-events: auto;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
 }
 
 @media (max-width: 600px) {
     header {
-        padding: 1.5rem;
+        padding: 1rem;
     }
 
     .setup-card {
         padding: 1.5rem;
+    }
+
+    .result-details {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .result-header {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .result-titles {
+        text-align: center;
+    }
+
+    .final-score {
+        align-items: center;
+    }
+
+    .final-hints {
+        justify-content: center;
     }
 }

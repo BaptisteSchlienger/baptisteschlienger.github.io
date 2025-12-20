@@ -363,16 +363,28 @@ document.addEventListener('DOMContentLoaded', () => {
             'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'
         };
 
+        const wordsToArabic = {
+            'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+            'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10'
+        };
+
         const simplify = (str) => {
             let s = str.toLowerCase();
             // Remove common suffixes/markers that users often omit
             s = s.replace(/\b(part|vol|volume|episode|chapter|book|phase)\b/g, '');
-            // Normalize Roman Numerals to digits (I -> 1, II -> 2, etc.)
-            // We search for stand-alone roman numerals
+
+            // Normalize Roman Numerals to digits
             Object.keys(romanToArabic).forEach(roman => {
                 const regex = new RegExp(`\\b${roman}\\b`, 'g');
                 s = s.replace(regex, romanToArabic[roman]);
             });
+
+            // Normalize Number Words to digits
+            Object.keys(wordsToArabic).forEach(word => {
+                const regex = new RegExp(`\\b${word}\\b`, 'g');
+                s = s.replace(regex, wordsToArabic[word]);
+            });
+
             // Standard cleanup
             return s.replace(/[:.,!?'\s-]/g, '').replace(/^the/, '');
         };

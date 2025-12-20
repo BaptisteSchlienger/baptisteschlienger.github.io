@@ -18,7 +18,7 @@
     <div class="cinema-overlay"></div>
 
     <header>
-        <a href="../../index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Home</a>
+        <a href="../../index.html#experiments" class="back-btn"><i class="fas fa-arrow-left"></i> Home</a>
         <div class="logo">
             <i class="fas fa-film"></i>
             <h1>PopcornQuizz</h1>
@@ -86,23 +86,33 @@
         <section id="result-screen" class="screen">
             <div id="confetti-container"></div>
             <div class="result-card glass">
-                <div class="result-icon">
-                    <i id="outcome-icon" class="fas fa-trophy"></i>
+                <div class="result-header">
+                    <div class="result-icon">
+                        <i id="outcome-icon" class="fas fa-trophy"></i>
+                    </div>
+                    <div class="result-titles">
+                        <h2 id="outcome-title">Game Over</h2>
+                        <div class="final-score">
+                            <span class="label">Round Score: </span>
+                            <span id="final-score-val" class="value">0</span>
+                        </div>
+                    </div>
                 </div>
-                <h2 id="outcome-title">Game Over</h2>
-                <div class="final-score">
-                    <span class="label">Round Score</span>
-                    <span id="final-score-val" class="value">0</span>
+
+                <div class="result-details">
+                    <div id="final-movie-reveal" class="final-movie-reveal">
+                        <img id="final-movie-img" src="" alt="Final Movie">
+                    </div>
+                    <div id="final-movie-content" class="final-movie-content">
+                        <h3 id="final-movie-title"></h3>
+                        <p id="result-message"></p>
+                        <div id="final-movie-info" class="final-movie-info">
+                            <div id="final-plot" class="final-plot"></div>
+                            <div id="final-hints" class="final-hints"></div>
+                        </div>
+                    </div>
                 </div>
-                <div id="final-movie-reveal" class="final-movie-reveal">
-                    <img id="final-movie-img" src="" alt="Final Movie">
-                    <h3 id="final-movie-title"></h3>
-                </div>
-                <p id="result-message"></p>
-                <div id="final-movie-info" class="final-movie-info">
-                    <div id="final-plot" class="final-plot"></div>
-                    <div id="final-hints" class="final-hints"></div>
-                </div>
+
                 <button id="restart-game" class="cta-btn secondary">Play Again <i class="fas fa-redo"></i></button>
             </div>
         </section>

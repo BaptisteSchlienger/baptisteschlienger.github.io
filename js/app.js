@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     initGlitchBackground();
     initContactBackground();
+    initExpCardBackgrounds();
     initTextGlitch();
     initLanguage();
     initSmoothScroll();
@@ -38,6 +39,7 @@ const translations = {
         "nav.experience": "Experience",
         "nav.skills": "Skills",
         "nav.education": "Education",
+        "nav.experiments": "Experiments",
         "nav.contact": "Contact",
 
         "hero.subtitle": "Full-Stack Developer & Problem Solver",
@@ -106,6 +108,15 @@ const translations = {
         "edu.ucsd.degree": "Computer Science Engineering Extension",
         "edu.ucsd.desc": "Technical & Theoretical courses including SEO and Business Communication Skills.",
 
+        "experiments.title": "Experiments",
+        "experiments.view": "View Experiment",
+        "experiments.ascii.title": "Animated ASCII",
+        "experiments.ascii.desc": "An interactive background generator using Perlin, Voronoi, and Random noise.",
+        "experiments.color.title": "ColorEncode",
+        "experiments.color.desc": "Hide and decode secret messages within the hex codes of color palettes.",
+        "experiments.quizz.title": "PopcornQuizz",
+        "experiments.quizz.desc": "A pixelated movie guessing game with multiple modes and hint systems.",
+
         "contact.title": "Get In Touch",
         "contact.subtitle": "Currently looking for freelance missions.",
         "contact.btn.email": "Email",
@@ -118,6 +129,7 @@ const translations = {
         "nav.experience": "Expériences",
         "nav.skills": "Compétences",
         "nav.education": "Formation",
+        "nav.experiments": "Labo",
         "nav.contact": "Contact",
 
         "hero.subtitle": "Développeur Full-Stack & Problem Solver",
@@ -185,6 +197,15 @@ const translations = {
         "edu.ucsd.meta": "Jan 2015 - Juil 2015 | San Diego, Californie, USA",
         "edu.ucsd.degree": "Computer Science Engineering Extension",
         "edu.ucsd.desc": "Cours techniques & théoriques incluant SEO et Business Communication Skills.",
+
+        "experiments.title": "Le Labo",
+        "experiments.view": "Voir l'Expérience",
+        "experiments.ascii.title": "ASCII Animé",
+        "experiments.ascii.desc": "Générateur de fonds interactifs utilisant les bruits de Perlin, Voronoï et Aléatoire.",
+        "experiments.color.title": "ColorEncode",
+        "experiments.color.desc": "Cachez et décodez des messages secrets dans les codes hexadécimaux de palettes de couleurs.",
+        "experiments.quizz.title": "PopcornQuizz",
+        "experiments.quizz.desc": "Un jeu de devinettes de films pixélisés avec plusieurs modes et systèmes d'indices.",
 
         "contact.title": "Me Contacter",
         "contact.subtitle": "Actuellement en recherche de missions freelance.",
@@ -733,6 +754,90 @@ document.addEventListener('keydown', (e) => {
 function activateKonami() {
     alert('Classic Mode Interrupted. Running Diagnostics...');
     document.body.style.filter = 'invert(1)';
+}
+function initExpCardBackgrounds() {
+    const cards = document.querySelectorAll('.experiment-card');
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$#@%&{}[]()<>*+-=/";
+    const fontSize = 12;
+    const charWidth = 8;
+
+    cards.forEach(card => {
+        const canvas = card.querySelector('.exp-card-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        let width, height, columns, rows;
+        let grid = [];
+        let mouse = { x: -1000, y: -1000 };
+
+        function resize() {
+            width = canvas.width = card.offsetWidth;
+            height = canvas.height = card.offsetHeight;
+            columns = Math.ceil(width / charWidth);
+            rows = Math.ceil(height / fontSize);
+
+            grid = [];
+            for (let r = 0; r < rows; r++) {
+                let rowData = [];
+                for (let c = 0; c < columns; c++) {
+                    rowData.push({
+                        char: chars[Math.floor(Math.random() * chars.length)]
+                    });
+                }
+                grid.push(rowData);
+            }
+        }
+
+        card.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+
+        card.addEventListener('mouseleave', () => {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.font = `${fontSize}px "JetBrains Mono"`;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < columns; c++) {
+                    const cell = grid[r][c];
+                    const x = c * charWidth;
+                    const y = r * fontSize;
+
+                    // Proximity Logic
+                    const dx = x - mouse.x;
+                    const dy = y - (mouse.y - fontSize / 2);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const interactionRadius = 120;
+
+                    if (dist < interactionRadius) {
+                        const influence = (1 - dist / interactionRadius);
+                        // Shift from invisible/white to cyan based on proximity
+                        ctx.fillStyle = `rgba(0, 129, 167, ${influence * 0.3})`;
+                    } else {
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0)'; // Invisible
+                    }
+
+                    // Occasional Glitch
+                    if (Math.random() > 0.98) {
+                        cell.char = chars[Math.floor(Math.random() * chars.length)];
+                    }
+
+                    ctx.fillText(cell.char, x, y);
+                }
+            }
+            requestAnimationFrame(draw);
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+        draw();
+    });
 }
 
 /* Mobile Menu Toggle */
