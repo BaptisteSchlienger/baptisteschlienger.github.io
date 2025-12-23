@@ -32,59 +32,17 @@ const MAP_DEFINITIONS = {
     random: { name: "Random Blob", icon: "fa-dice", desc: "Classic procedurally generated island.", type: 'random', size: 7 },
     big_hex: { name: "Big Hex", icon: "fa-vector-square", desc: "A perfectly symmetrical large hexagon.", type: 'hex', size: 9 },
     small_hex: { name: "Small Hex", icon: "fa-cube", desc: "A tighter, quicker skirmish map.", type: 'hex', size: 5 },
-    gb: {
-        name: "Great Britain", icon: "fa-mug-hot", desc: "The British Isles.", type: 'ascii',
-        data: [
-            "      XX   ",
-            "    XXXXXX ",
-            "    XXXXXX ",
-            "     XXXX  ",
-            "     XXX   ",
-            "    XXXX   ",
-            "   XXXXX   ",
-            "   XXXX    ",
-            "  XXXXX    ",
-            " XXXXXX    ",
-            " XXXXX     ",
-            "XXXXX      ",
-            "XXXX       ",
-            "XXX        "
-        ]
-    },
     westeros: {
         name: "Westeros", icon: "fa-dragon", desc: "The Seven Kingdoms.", type: 'ascii',
-        data: [
-            "   XXXX   ",
-            "  XXXXXX  ",
-            "  XXXXXX  ",
-            "   XXXX   ",
-            "    XX    ",
-            "   XXXX   ",
-            "  XXXXXX  ",
-            "  XXXXXXX ",
-            " XXXXXXXX ",
-            " XXXXXXX  ",
-            "  XXXXX   ",
-            "   XXX    ",
-            "  XXXX    ",
-            " XXXXXX   ",
-            " XXXXXXX  ",
-            "XXXXXXXXX "
-        ]
+        get data() { return window.MAP_DATA_WESTEROS || []; }
+    },
+    earth_sm: {
+        name: "Small Earth", icon: "fa-globe", desc: "A smaller world map.", type: 'ascii',
+        get data() { return window.MAP_DATA_EARTH_SM || []; }
     },
     earth: {
         name: "Earth", icon: "fa-globe-americas", desc: "A rough approximation of the world.", type: 'ascii',
-        data: [
-            "  XX      XXXXXXXXXX   ",
-            " XXXXX   XXXXXXXXXXX   ",
-            "XXXXXX   XXXXXX XXXX   ",
-            " XXXXX    XXXX  XXXX   ",
-            "  XXX     XXXX   XXX   ",
-            "   XX     XXXX    XX  X",
-            "   XX      XXX    XX XX",
-            "          XXXX         ",
-            "          XXXX         "
-        ]
+        get data() { return window.MAP_DATA_EARTH || []; }
     }
 };
 
@@ -135,7 +93,7 @@ const state = {
 
 // --- Initialization & Setup ---
 function setup() {
-    let humanCount = 1; let totalCount = 4;
+    let humanCount = 1; let totalCount = 6;
     const countBtns = document.querySelectorAll('.count-btn');
     const totalBtns = document.querySelectorAll('.total-btn');
     countBtns.forEach(btn => btn.addEventListener('click', () => {
@@ -161,6 +119,24 @@ function setupMapSelection() {
     const selectedName = document.getElementById('selected-map-name');
     const selectedInput = document.getElementById('selected-map-id');
 
+    const sliderGroup = document.getElementById('map-size-group');
+    const slider = document.getElementById('map-size-slider');
+    const sliderDisplay = document.getElementById('map-size-display');
+
+    // Toggle slider visibility
+    const updateSliderVisibility = (key) => {
+        if (key === 'random') sliderGroup.classList.remove('hidden');
+        else sliderGroup.classList.add('hidden');
+    };
+
+    // Initial check
+    updateSliderVisibility(selectedInput.value);
+
+    // Slider Value Update
+    slider.addEventListener('input', (e) => {
+        sliderDisplay.textContent = `${e.target.value} Hexes`;
+    });
+
     btn.addEventListener('click', () => {
         // Populate list
         list.innerHTML = '';
@@ -175,6 +151,7 @@ function setupMapSelection() {
             card.addEventListener('click', () => {
                 selectedInput.value = key;
                 selectedName.textContent = map.name;
+                updateSliderVisibility(key); // Update Visibility
                 modal.classList.add('hidden');
                 document.querySelectorAll('.map-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
@@ -259,6 +236,7 @@ function setupGameEvents() {
     });
 
     document.getElementById('restart-btn').addEventListener('click', restartGame);
+    document.getElementById('quit-btn').addEventListener('click', restartGame);
 
     // Shop Button Logic
     document.querySelectorAll('.shop-item').forEach(btn => {
@@ -323,12 +301,44 @@ function generateIsland(totalPlayers, mapType = 'random') {
     let allHexes = [];
     const config = MAP_DEFINITIONS[mapType] || MAP_DEFINITIONS.random;
 
-    if (config.type === 'hex' || config.type === 'random') {
+    if (config.type === 'hex') {
         const size = config.size;
         for (let q = -size; q <= size; q++) {
             for (let r = -size; r <= size; r++) {
                 if (Math.abs(q + r) <= size) allHexes.push(new Hex(q, r));
             }
+        }
+    } else if (config.type === 'random') {
+        // Blob Algorithm
+        // Read slider value if available, formatted as int
+        const sliderVal = document.getElementById('map-size-slider');
+        const targetCount = sliderVal ? parseInt(sliderVal.value) : (size * size * 3); // Default fallback
+
+        const center = new Hex(0, 0);
+        allHexes.push(center);
+        const addedHashes = new Set([center.toString()]);
+        const frontier = center.getNeighbors();
+
+        while (allHexes.length < targetCount && frontier.length > 0) {
+            // Pick random extension point
+            const idx = Math.floor(Math.random() * frontier.length);
+            const candidate = frontier[idx];
+
+            // Remove efficiently
+            frontier[idx] = frontier[frontier.length - 1];
+            frontier.pop();
+
+            if (addedHashes.has(candidate.toString())) continue;
+
+            addedHashes.add(candidate.toString());
+            allHexes.push(candidate);
+
+            // Add new neighbors
+            candidate.getNeighbors().forEach(n => {
+                if (!addedHashes.has(n.toString())) {
+                    frontier.push(n);
+                }
+            });
         }
     } else if (config.type === 'ascii') {
         allHexes = parseAsciiMap(config.data);
@@ -390,6 +400,7 @@ function parseAsciiMap(lines) {
     // We need to center it afterwards.
 
     const hexes = [];
+    if (!lines || lines.length === 0) return hexes;
     const height = lines.length;
     const width = lines[0].length;
 
@@ -752,6 +763,7 @@ function processGameClick(e) {
         if (canMoveUnit(state.selectedCell, cell)) {
             executeMove(state.selectedCell, cell);
             state.selectedCell = null;
+            state.validTargets.clear();
             const cursorFollower = document.getElementById('cursor-follower');
             if (cursorFollower) cursorFollower.style.display = 'none';
         } else {
@@ -963,6 +975,18 @@ function startTurn() {
             } else t.money = 0;
         }
     });
+
+    // Auto-select biggest territory for human player convenience
+    if (p.type === 'human') {
+        const myTerritories = Array.from(state.territories.values())
+            .filter(t => t.playerId === p.id)
+            .sort((a, b) => b.cells.length - a.cells.length);
+
+        if (myTerritories.length > 0) {
+            state.activeTerritoryId = myTerritories[0].id;
+        }
+    }
+
     updateUI();
     if (p.type === 'ai') setTimeout(runAITurn, 600);
 }
@@ -1073,9 +1097,19 @@ function updateUI() {
     // Update active territory stats if selected, else current player's aggregate or first territory
     const t = state.territories.get(state.activeTerritoryId) || Array.from(state.territories.values()).find(t => t.playerId === p.id);
     if (t) {
+        const income = t.getIncome();
+        const wages = t.getWages();
+
         document.getElementById('stat-land').textContent = t.cells.length;
-        document.getElementById('stat-income').textContent = `+${t.getIncome()}`;
-        document.getElementById('stat-wages').textContent = `-${t.getWages()}`;
+        document.getElementById('stat-income').textContent = `+${income}`;
+
+        const wagesEl = document.getElementById('stat-wages');
+        wagesEl.textContent = `-${wages}`;
+
+        // Highlight if Wages > Income (Bankruptcy risk)
+        if (wages > income) wagesEl.classList.add('text-danger');
+        else wagesEl.classList.remove('text-danger');
+
         document.getElementById('stat-balance').textContent = t.money;
 
         // Dim shop buttons based on balance AND ownership
@@ -1210,8 +1244,8 @@ function pixelToHex(x, y) {
     // We need to match render transformation.
     // Let's standardize render to be centered properly.
 
-    const centeredX = x - canvas.width / 2;
-    const centeredY = y - canvas.height / 2;
+    const centeredX = x - canvas.clientWidth / 2;
+    const centeredY = y - canvas.clientHeight / 2;
 
     const worldX = (centeredX - state.camera.x) / state.camera.zoom;
     const worldY = (centeredY - state.camera.y) / state.camera.zoom;
@@ -1231,14 +1265,39 @@ function pixelToHex(x, y) {
 }
 
 function centerCamera() {
-    // Center of screen
-    // We want world (0,0) to be at screen center
-    // Screen = (World * Zoom) + Pan
-    // If World=0, Screen = Pan
-    // So Pan = ScreenCenter (0,0 relative to center translate)
-    state.camera.x = 0;
-    state.camera.y = 0;
-    state.camera.zoom = 1;
+    if (state.grid.size === 0) {
+        state.camera.x = 0;
+        state.camera.y = 0;
+        state.camera.zoom = 1;
+        return;
+    }
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+    for (const cell of state.grid.values()) {
+        const p = cell.hex.toPixel();
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    }
+
+    const mapCenterX = (minX + maxX) / 2;
+    const mapCenterY = (minY + maxY) / 2;
+
+    // Optional: Auto-fit for large maps
+    const mapWidth = maxX - minX + HEX_SIZE * 3;
+    const mapHeight = maxY - minY + HEX_SIZE * 3;
+    const zoomX = canvas.clientWidth / mapWidth;
+    const zoomY = canvas.clientHeight / mapHeight;
+    // Auto-zoom to fit, but max out at 1.0
+    state.camera.zoom = Math.min(zoomX, zoomY, 1.0);
+    // Clamp minimum zoom to avoid tiny maps
+    state.camera.zoom = Math.max(state.camera.zoom, 0.3);
+
+    // Apply zoom to center calculation
+    state.camera.x = -mapCenterX * state.camera.zoom;
+    state.camera.y = -mapCenterY * state.camera.zoom;
 }
 
 function render() {
@@ -1248,7 +1307,7 @@ function render() {
     ctx.save();
 
     // Move to center of canvas
-    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.translate(canvas.clientWidth / 2, canvas.clientHeight / 2);
 
     // Apply Pan
     ctx.translate(state.camera.x, state.camera.y);
