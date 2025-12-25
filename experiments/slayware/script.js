@@ -138,6 +138,7 @@ const state = {
     selectedCell: null, activeTerritoryId: null, shopSelected: null,
     turn: 1, gameStarted: false, gameOver: false,
     validTargets: new Set(),
+    renderLoopId: null, // Track the animation frame ID
     bgSprites: [],
     waterSprite: null
 };
@@ -229,7 +230,12 @@ function setupMapSelection() {
 
     const waterImg = new Image();
     waterImg.src = 'assets/water_tile.png';
-    waterImg.onload = () => { state.waterSprite = waterImg; checkLoad(); };
+    waterImg.onload = () => {
+        state.waterSprite = waterImg;
+        state.playerSprites[0] = waterImg; // Assign to Neutral/Ocean for rendering
+        checkLoad();
+        startRenderLoop();
+    };
     waterImg.onerror = checkLoad; // Proceed even if fails
 
     // Load Tree (User provided)
@@ -327,11 +333,14 @@ function startGame(humans, total) {
 
     generateIsland(total, mapId);
     refreshTerritories();
+
+    state.gameStarted = true;
+
     centerCamera();
     setupGameEvents();
     initLeaderboard();
 
-    state.gameStarted = true; startTurn(); render(); updateUI();
+    startTurn(); render(); updateUI();
 }
 
 function initLeaderboard() {
@@ -362,7 +371,13 @@ function initLeaderboard() {
     });
 }
 
+// Flag to prevent duplicate listeners
+let gameEventsSetup = false;
+
 function setupGameEvents() {
+    if (gameEventsSetup) return;
+    gameEventsSetup = true;
+
     window.addEventListener('resize', handleResize);
     document.getElementById('end-turn-btn').addEventListener('click', endTurn);
 
@@ -515,7 +530,7 @@ function handleResize() {
     render();
 }
 
-function generateIsland(totalPlayers, mapType = 'random') {
+function generateIsland(totalPlayers, mapType = 'random', forcedSize = null) {
     let allHexes = [];
     const config = MAP_DEFINITIONS[mapType] || MAP_DEFINITIONS.random;
 
@@ -530,7 +545,7 @@ function generateIsland(totalPlayers, mapType = 'random') {
         // Blob Algorithm
         // Read slider value if available, formatted as int
         const sliderVal = document.getElementById('map-size-slider');
-        const targetCount = sliderVal ? parseInt(sliderVal.value) : (size * size * 3); // Default fallback
+        const targetCount = forcedSize ? forcedSize : (sliderVal ? parseInt(sliderVal.value) : (config.size * config.size * 3)); // Default fallback
 
         const center = new Hex(0, 0);
         allHexes.push(center);
@@ -589,12 +604,17 @@ function generateIsland(totalPlayers, mapType = 'random') {
     }
 
     // 5. Assign
+    // Clear hexes array if we are regenerating
+    state.hexes = [];
+
+    // 5. Assign
     allHexes.forEach((hex, index) => {
         if (index < deck.length) {
             const info = deck[index];
             const cell = new MapCell(hex, info.playerId);
             cell.tree = info.tree;
             state.grid.set(hex.toString(), cell);
+            state.hexes.push(cell); // Sync array for render loop
         }
     });
 }
@@ -1100,6 +1120,10 @@ function canMoveUnit(from, to) {
     if (!isAdjacentToTerritory) return false;
 
     if (from.playerId !== to.playerId) return checkAttack(STRENGTHS[from.unit], to);
+
+    // Merge/Move to own territory logic
+    if (to.building) return false; // Cannot move onto own buildings (Capital/Castle)
+
     return true; // Adjacent friendly blob
 }
 
@@ -1303,6 +1327,7 @@ function showGameOver(winnerId, winnerName) {
 }
 
 function restartGame() {
+    console.log("restartGame() called");
     document.getElementById('game-over-modal').classList.add('hidden');
     document.getElementById('game-ui').classList.add('hidden');
     document.getElementById('setup-screen').classList.remove('hidden');
@@ -1314,6 +1339,12 @@ function restartGame() {
     state.players = [];
     state.territories = new Map();
     logContainer.innerHTML = '';
+
+    // Stop any existing render loop before resetting
+    stopRenderLoop();
+
+    console.log("Calling initSetupBackground() from restartGame");
+    initSetupBackground();
 }
 
 // --- AI Logic ---
@@ -1331,7 +1362,7 @@ function runAITurn() {
             const targets = ns.filter(n => n.playerId !== pId && checkAttack(STRENGTHS[cell.unit], n));
             if (targets.length > 0) executeMove(cell, targets[0]);
             else {
-                const own = ns.filter(n => n.playerId === pId);
+                const own = ns.filter(n => n.playerId === pId && !n.building);
                 if (own.length > 0) executeMove(cell, own[Math.floor(Math.random() * own.length)]);
             }
         });
@@ -1467,7 +1498,7 @@ function drawHex(ctx, x, y, size, cell) {
 
         ctx.save();
         // Highlight active territory (Brighten)
-        if (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
+        if (state.activeTerritoryId !== null && state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
             ctx.filter = 'brightness(1.5)';
         }
         ctx.drawImage(sprite, drawX, drawY, w, h);
@@ -1476,7 +1507,7 @@ function drawHex(ctx, x, y, size, cell) {
         // Fallback Flat
         ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(x + size * Math.cos(a), y + size * Math.sin(a)); }
         ctx.closePath();
-        ctx.fillStyle = (state.selectedCell === cell) ? '#fff' : (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) ? color.fill : color.bg;
+        ctx.fillStyle = (state.selectedCell === cell) ? '#fff' : (state.activeTerritoryId !== null && state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) ? color.fill : color.bg;
         ctx.fill(); ctx.strokeStyle = color.fill; ctx.stroke();
     }
 
@@ -1486,7 +1517,7 @@ function drawHex(ctx, x, y, size, cell) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(x + size * Math.cos(a), surfaceY + size * Math.sin(a)); }
             ctx.fill();
-        } else if (state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
+        } else if (state.activeTerritoryId !== null && state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
             // Active territory tint? maybe not needed if texture matches color
         }
     }
@@ -1695,6 +1726,14 @@ function centerCamera() {
     // Apply zoom to center calculation
     state.camera.x = -mapCenterX * state.camera.zoom;
     state.camera.y = -mapCenterY * state.camera.zoom;
+
+    // Fix centering for in-game UI (Sidebar 350px, Header 80px)
+    if (state.gameStarted) {
+        // Visual Center X: (W - 350) / 2. Screen Center: W/2. Offset: -175
+        // Visual Center Y: 80 + (H - 80) / 2. Screen Center: H/2. Offset: +40
+        state.camera.x -= 175;
+        state.camera.y += 40;
+    }
 }
 
 function getVisibleHexBounds() {
@@ -1850,8 +1889,21 @@ function drawWater(ctx) {
     }
 }
 
-function render() {
-    if (!state.gameStarted) return;
+let lastFrameTime = 0;
+const targetFPS = 60;
+const frameInterval = 1000 / targetFPS;
+
+function render(timestamp) {
+    state.renderLoopId = requestAnimationFrame(render);
+
+    // Throttle FPS
+    if (!lastFrameTime) lastFrameTime = timestamp;
+    const elapsed = timestamp - lastFrameTime;
+
+    if (elapsed < frameInterval) return;
+
+    // Adjust for latency
+    lastFrameTime = timestamp - (elapsed % frameInterval);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
@@ -1867,10 +1919,6 @@ function render() {
 
     // Draw Infinite Background
     drawBackground(ctx);
-
-    // Sort background tiles if needed. For now, let's just loop r then q, or use drawBackground logic.
-    // Since drawBackground loops q then r, let's swap or sort?
-    // Actually, loop order matters for overlapping sprites.
 
     // Draw Water Layer
     drawWater(ctx);
@@ -1888,10 +1936,48 @@ function render() {
     });
 
     ctx.restore();
-    requestAnimationFrame(render);
+}
+
+function startRenderLoop() {
+    if (!state.renderLoopId) {
+        state.renderLoopId = requestAnimationFrame(render);
+    }
+}
+
+function stopRenderLoop() {
+    if (state.renderLoopId) {
+        cancelAnimationFrame(state.renderLoopId);
+        state.renderLoopId = null;
+    }
+}
+
+function initSetupBackground() {
+    console.log("initSetupBackground() called");
+    // Setup dummy players for colors
+    state.players = [];
+    for (let i = 1; i <= 6; i++) {
+        state.players.push({ id: i, type: 'ai' });
+    }
+
+    // Generate random 100-hex island
+    console.log("Generating island...");
+    generateIsland(6, 'random', 100);
+    console.log("Island generated. Grid size:", state.grid.size, "Hexes array length:", state.hexes.length);
+
+    handleResize();
+    centerCamera();
+    // Adjust pan for the new zoom level to keep it centered
+    state.camera.x *= 1.2;
+    state.camera.y *= 1.2;
+    state.camera.zoom = 1.2; // Zoom in slightly for immersive background
+    // Ensure render loop is running if not already match state
+    // (Render is called by checkLoad, but this ensures map is ready)
+    console.log("Forcing render loop from initSetupBackground");
+    startRenderLoop();
 }
 
 setup();
+initSetupBackground();
 
 document.getElementById('recenter-btn').addEventListener('click', centerCamera);
 

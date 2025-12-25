@@ -5,15 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SlayWare | WIP</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=glass">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
 <body>
+    <!-- Game Canvas (Background) -->
+    <canvas id="game-canvas"></canvas>
+
     <!-- Setup Screen -->
     <div id="setup-screen" class="setup-overlay">
         <div style="position: absolute; top: 1rem; left: 2rem; z-index: 2001;">
-            <a href="../../index.html#experiments" class="back-link" style="margin-top: 12px;"><i
+            <a href="../../index.html#experiments" class="back-link glass-btn" style="margin-top: 12px;"><i
                     class="fas fa-arrow-left"></i> Portfolio</a>
         </div>
         <div class="setup-card glass">
@@ -79,14 +82,14 @@
     <div id="game-ui" class="hidden">
         <header>
             <div class="header-left">
-                <a href="../../index.html#experiments" class="back-link"><i class="fas fa-arrow-left"></i> Portfolio</a>
+                <button id="quit-btn" class="secondary-btn" title="Quit to Menu"><i class="fas fa-sign-out-alt"></i>
+                    Quit</button>
             </div>
             <div class="header-center">
                 <h1>SlayWare</h1>
             </div>
             <div class="header-right">
-                <button id="quit-btn" class="secondary-btn" title="Quit to Menu"><i class="fas fa-sign-out-alt"></i>
-                    Quit</button>
+
                 <button id="help-btn" class="secondary-btn"><i class="fas fa-question-circle"></i> Help</button>
                 <button id="recenter-btn" class="secondary-btn" title="Recenter Map"><i
                         class="fas fa-crosshairs"></i></button>
@@ -148,9 +151,7 @@
             </div>
         </div>
         <main class="game-container">
-            <section class="map-view">
-                <canvas id="game-canvas"></canvas>
-            </section>
+
 
             <aside class="sidebar glass">
                 <div class="sidebar-section player-list" id="player-status-panel">

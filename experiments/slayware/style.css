@@ -16,10 +16,15 @@
     --p4-bg: #713f12;
     --p5-color: #c084fc;
     --p5-bg: #581c87;
-    /* Purple */
     --p6-color: #fb923c;
     --p6-bg: #7c2d12;
     /* Orange */
+
+    /* Glass Theme */
+    --glass-bg: rgba(15, 23, 42, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-blur: blur(24px);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -46,6 +51,10 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
+    pointer-events: none;
+    /* Allow clicks to pass through to canvas */
+    position: relative;
+    z-index: 10;
 }
 
 /* Setup Screen */
@@ -55,7 +64,8 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+    /* background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); */
+    background: transparent;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -63,15 +73,16 @@ body {
 }
 
 .setup-card {
-    background: rgba(30, 41, 59, 0.8);
-    backdrop-filter: blur(20px);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     padding: 3rem;
     border-radius: 32px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
     width: 90%;
     max-width: 500px;
     text-align: center;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--glass-shadow);
 }
 
 .setup-card h2 {
@@ -139,10 +150,18 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(15, 23, 42, 0.6);
+    /* More transparent */
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 100;
+    pointer-events: auto;
+    /* Re-enable clicks */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 80px;
 }
 
 .header-center h1 {
@@ -164,6 +183,26 @@ header {
 
 .back-link:hover {
     color: var(--color-text);
+}
+
+.glass-btn {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    padding: 0.8rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    color: var(--color-text);
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.glass-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
 .primary-btn {
@@ -230,17 +269,20 @@ header {
 }
 
 #game-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    z-index: 0;
 }
 
 .sidebar {
     width: 350px;
-    /* Slights narrower */
-    background: rgba(30, 41, 59, 0.85);
-    /* Slightly more opaque */
-    backdrop-filter: blur(20px);
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-left: 1px solid var(--glass-border);
     display: flex;
     flex-direction: column;
     padding: 1rem;
@@ -248,6 +290,14 @@ header {
     overflow-y: auto;
     min-width: 300px;
     z-index: 10;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.2);
+    position: fixed;
+    right: 0;
+    top: 80px;
+    /* Header height */
+    bottom: 0;
+    pointer-events: auto;
+    /* Re-enable clicks */
 }
 
 .sidebar-section {
@@ -479,11 +529,15 @@ header {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.4);
+    /* Dimmer backing */
+    backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 3000;
+    pointer-events: auto;
+    /* Re-enable clicks inside disabled parent */
 }
 
 .modal.hidden {
@@ -491,15 +545,17 @@ header {
 }
 
 .modal-content {
-    background: rgba(30, 41, 59, 1);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     padding: 2.5rem;
     border-radius: 24px;
     max-width: 600px;
     width: 90%;
     max-height: 80vh;
     position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
     display: flex;
     flex-direction: column;
 }
@@ -715,16 +771,16 @@ header {
 .shop-tooltip {
     position: fixed;
     z-index: 1000;
-    background: rgba(20, 30, 48, 0.95);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
     padding: 12px;
     border-radius: 8px;
     width: 200px;
     pointer-events: none;
     color: var(--text-primary);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--glass-shadow);
     transform: translate(15px, 15px);
 }
 
