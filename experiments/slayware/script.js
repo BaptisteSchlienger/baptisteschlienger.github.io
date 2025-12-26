@@ -474,7 +474,7 @@ state.playerSprites = {};
 
 const checkLoad = () => {
     loadedCount++;
-    if (loadedCount === totalTextures) render();
+    if (loadedCount === totalTextures) startRenderLoop();
 };
 
 const waterImg = new Image();
@@ -483,7 +483,6 @@ waterImg.onload = () => {
     state.waterSprite = waterImg;
     state.playerSprites[0] = waterImg; // Assign to Neutral/Ocean for rendering
     checkLoad();
-    startRenderLoop();
 };
 waterImg.onerror = checkLoad; // Proceed even if fails
 
@@ -1608,7 +1607,7 @@ function startTurn() {
         const hasLand = Array.from(state.territories.values()).some(t => t.playerId === p.id);
         if (!hasLand) {
             logEvent(`${p.type === 'human' ? 'You were' : 'Player ' + p.id} eliminated! Skipping turn.`, "system");
-            setTimeout(endTurn, 100);
+            state.turnTimer = setTimeout(endTurn, 100);
             return;
         }
     }
@@ -1667,7 +1666,7 @@ function startTurn() {
     }
 
     updateUI();
-    if (p.type === 'ai') setTimeout(runAITurn, 600);
+    if (p.type === 'ai') state.turnTimer = setTimeout(runAITurn, 600);
 }
 
 
@@ -1761,6 +1760,11 @@ function showGameOver(winnerId, winnerName) {
 function restartGame() {
     resetShopSelection();
     console.log("restartGame() called");
+
+    // Stop any pending turn logic
+    if (state.turnTimer) clearTimeout(state.turnTimer);
+    stopRenderLoop();
+
     document.getElementById('game-over-modal').classList.add('hidden');
     document.getElementById('game-ui').classList.add('hidden');
     document.getElementById('setup-screen').classList.remove('hidden');
@@ -1771,6 +1775,8 @@ function restartGame() {
     state.grid = new Map();
     state.players = [];
     state.territories = new Map();
+    state.waterCache = new Map(); // Clear render cache
+    state.turnTimer = null; // Reset timer tracking
     logContainer.innerHTML = '';
 
     // Stop any existing render loop before resetting
@@ -1793,7 +1799,7 @@ function runAITurn() {
     else if (level === 3) aiHard(pId, ts);
     else if (level === 4) aiExpert(pId, ts);
 
-    setTimeout(endTurn, 500);
+    state.turnTimer = setTimeout(endTurn, 500);
 }
 
 // Level 1: Random & Erratic
@@ -2045,7 +2051,7 @@ function logEvent(msg, type = '') {
     }
 }
 
-function drawHex(ctx, x, y, size, cell) {
+function drawHex(ctx, x, y, size, cell, zoom = 1) {
     const color = PLAYER_COLORS[cell.playerId];
     let surfaceY = y;
     if (state.playerSprites && state.playerSprites[cell.playerId]) {
@@ -2130,6 +2136,7 @@ function drawHex(ctx, x, y, size, cell) {
             drawIcon(ctx, x, surfaceY, '🏰');
         }
     } else if (cell.unit) {
+        if (zoom < 0.6) return; // LOD: Skip units when zoomed out
         // Check for player-specific sprite first, then default
         const pSprites = state.playerUnitSprites && state.playerUnitSprites[cell.playerId];
         const specificSprite = pSprites && pSprites[cell.unit];
@@ -2415,7 +2422,13 @@ function drawWater(ctx) {
     const now = Date.now() / 1000;
 
     // Helper to find minimal distance to land (Breadth/Ring-First Search)
+    // Helper to find minimal distance to land (Breadth/Ring-First Search)
     const getLandDistance = (startHex, maxDist) => {
+        const key = startHex.toString();
+        if (state.waterCache && state.waterCache.has(key)) {
+            return state.waterCache.get(key);
+        }
+
         // Optimization: Check rings outward
         for (let d = 1; d <= maxDist; d++) {
             // Generate ring d
@@ -2425,11 +2438,18 @@ function drawWater(ctx) {
             for (let i = 0; i < 6; i++) {
                 const dir = Hex.directions[i];
                 for (let j = 0; j < d; j++) {
-                    if (state.grid.has(current.toString())) return d;
+                    if (state.grid.has(current.toString())) {
+                        if (!state.waterCache) state.waterCache = new Map();
+                        state.waterCache.set(key, d);
+                        return d;
+                    }
                     current = current.add(dir);
                 }
             }
         }
+
+        if (!state.waterCache) state.waterCache = new Map();
+        state.waterCache.set(key, maxDist + 1);
         return maxDist + 1; // Beyond max
     };
 
@@ -2523,18 +2543,42 @@ function render(timestamp) {
         drawWater(ctx);
     }
 
-    // Sort cells by depth (Y coordinate) to ensure correct overlap for 3D tiles
-    // Use cached array if available
-    const source = (state.hexes && state.hexes.length > 0) ? state.hexes : Array.from(state.grid.values());
-    const sortedCells = source.sort((a, b) => {
-        const pay = Math.sqrt(3) / 2 * a.hex.q + Math.sqrt(3) * a.hex.r; // Inline simplified Y calc
-        const pby = Math.sqrt(3) / 2 * b.hex.q + Math.sqrt(3) * b.hex.r;
-        return pay - pby;
-    });
+    // Sort cells by depth (Y coordinate) to ensure correct board overlap
+    // Optimization: Use pre-sorted state.hexes if available (generated in setup)
+    // sorting 1000+ items every frame is O(N log N) -> expensive.
+
+    let sortedCells = state.hexes;
+    if (!sortedCells || sortedCells.length === 0) {
+        // Fallback (Should rarely happen in game)
+        sortedCells = Array.from(state.grid.values()).sort((a, b) => {
+            const pay = Math.sqrt(3) / 2 * a.hex.q + Math.sqrt(3) * a.hex.r;
+            const pby = Math.sqrt(3) / 2 * b.hex.q + Math.sqrt(3) * b.hex.r;
+            return pay - pby;
+        });
+    }
+
+    // Optimization: Frustum Culling
+    // Only draw hexes that are within the visible bounds
+    const bounds = getVisibleHexBounds();
+    // Add margin to prevent popping at edges (e.g. 3D height)
+    const margin = 2;
+    const qMin = bounds.qMin - margin;
+    const qMax = bounds.qMax + margin;
+    const rMin = bounds.rMin - margin;
+    const rMax = bounds.rMax + margin;
 
     sortedCells.forEach(cell => {
-        const pos = cell.hex.toPixel();
-        drawHex(ctx, pos.x, pos.y, HEX_SIZE - 1, cell);
+        // Broad phase cull
+        if (cell.hex.q < qMin || cell.hex.q > qMax || cell.hex.r < rMin || cell.hex.r > rMax) return;
+
+        // Inline toPixel to avoid object creation
+        // x = size * 3/2 * q
+        // y = size * sqrt(3) * (r + q/2)
+        const size = HEX_SIZE;
+        const x = size * 1.5 * cell.hex.q;
+        const y = size * Math.sqrt(3) * (cell.hex.r + cell.hex.q / 2);
+
+        drawHex(ctx, x, y, size - 1, cell, state.camera.zoom);
     });
 
     ctx.restore();
