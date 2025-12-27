@@ -1103,3 +1103,34 @@ header {
 .shop-tooltip .wage {
     color: #f87171;
 }
+
+/* Toast Notification */
+.toast {
+    position: fixed;
+    top: 80px;
+    /* Below the header */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20, 20, 30, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 999px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    pointer-events: none;
+    /* Don't block clicks */
+    opacity: 0;
+    transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    z-index: 2000;
+    transform: translateX(-50%) translateY(-20px);
+}
+
+.toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}

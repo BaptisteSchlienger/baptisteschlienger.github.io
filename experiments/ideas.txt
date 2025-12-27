@@ -22,6 +22,8 @@ AnimatedAsciiBackground
     - export button to download the effect as a .html file
 SlayWare
     - Webversion of the classic game Slay
+ASCII Water simulation
+Piratopia
 
 Language & Meaning (but not just guessing words)
     Synonym Ladder

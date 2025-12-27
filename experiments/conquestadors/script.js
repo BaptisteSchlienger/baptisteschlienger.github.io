@@ -1,5 +1,5 @@
 /**
- * SlayWare - Web adaptation of Slay
+ * Conquestadors - Web adaptation of Slay
  * Final Version: Rules.txt Sync (Movement, Timing, Visuals)
  */
 
@@ -130,9 +130,25 @@ const CAMPAIGN_LEVELS = ISLAND_NAMES.slice(0, 100).map((name, i) => {
     };
 });
 
+const LOCAL_STORAGE_KEY = 'conquestadors_progress';
+
+// Migration Logic
+try {
+    const oldData = localStorage.getItem('slayware_progress');
+    if (oldData) {
+        if (!localStorage.getItem(LOCAL_STORAGE_KEY)) {
+            localStorage.setItem(LOCAL_STORAGE_KEY, oldData);
+            console.log("Migrated save data to Conquestadors.");
+        }
+        localStorage.removeItem('slayware_progress'); // Clean up
+    }
+} catch (e) {
+    console.error("Migration failed", e);
+}
+
 function getProgress() {
     try {
-        const data = localStorage.getItem('slayware_progress');
+        const data = localStorage.getItem(LOCAL_STORAGE_KEY);
         return data ? JSON.parse(data) : [];
     } catch (e) { return []; }
 }
@@ -141,9 +157,10 @@ function saveLevelComplete(levelIndex) {
     const progress = getProgress();
     if (!progress.includes(levelIndex)) {
         progress.push(levelIndex);
-        localStorage.setItem('slayware_progress', JSON.stringify(progress));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(progress));
     }
 }
+
 
 class Hex {
     constructor(q, r) { this.q = q; this.r = r; }
@@ -187,6 +204,7 @@ const state = {
     grid: new Map(), players: [], currentPlayerIdx: 0,
     camera: { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 }, territories: new Map(),
     selectedCell: null, activeTerritoryId: null, shopSelected: null,
+    toastTimeout: null,
     turn: 1, gameStarted: false, gameOver: false,
     validTargets: new Set(),
     renderLoopId: null, // Track the animation frame ID
@@ -1663,6 +1681,7 @@ function startTurn() {
         if (myTerritories.length > 0) {
             state.activeTerritoryId = myTerritories[0].id;
         }
+        showToast("It's your turn!", 2500);
     }
 
     updateUI();
@@ -2071,13 +2090,15 @@ function drawHex(ctx, x, y, size, cell, zoom = 1) {
 
         surfaceY = y + size * Math.sqrt(3) - h;
 
-        ctx.save();
         // Highlight active territory (Brighten)
-        if (state.activeTerritoryId !== null && state.activeTerritoryId === cell.territoryId && cell.playerId !== 0) {
+        const isHighlighted = state.activeTerritoryId !== null && state.activeTerritoryId === cell.territoryId && cell.playerId !== 0;
+        if (isHighlighted) {
             ctx.filter = 'brightness(1.5)';
         }
         ctx.drawImage(sprite, drawX, drawY, w, h);
-        ctx.restore();
+        if (isHighlighted) {
+            ctx.filter = 'none';
+        }
     } else {
         // Fallback Flat
         ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(x + size * Math.cos(a), y + size * Math.sin(a)); }
@@ -2330,35 +2351,52 @@ function getVisibleHexBounds() {
 
     // Check 4 corners + center + mid-edges to be safe? 
     // 4 corners is usually enough for convex hull of screen.
-    const corners = [
-        { x: 0, y: 0 },
-        { x: canvas.clientWidth, y: 0 },
-        { x: 0, y: canvas.clientHeight },
-        { x: canvas.clientWidth, y: canvas.clientHeight }
-    ];
+    // Re-use static array if possible, or just iterate manual coordinates to avoid allocation
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+
 
     let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
 
-    corners.forEach(p => {
-        const worldX = (p.x - cx - state.camera.x) / state.camera.zoom;
-        const worldY = (p.y - cy - state.camera.y) / state.camera.zoom;
+    // Corner 1: 0,0
+    let worldX = (-cx - state.camera.x) / state.camera.zoom;
+    let worldY = (-cy - state.camera.y) / state.camera.zoom;
+    let q = (2 / 3 * worldX) / HEX_SIZE;
+    let r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / HEX_SIZE;
+    if (q < minQ) minQ = q; if (q > maxQ) maxQ = q;
+    if (r < minR) minR = r; if (r > maxR) maxR = r;
 
-        const q = (2 / 3 * worldX) / HEX_SIZE;
-        const r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / HEX_SIZE;
+    // Corner 2: w,0
+    worldX = (w - cx - state.camera.x) / state.camera.zoom;
+    worldY = (-cy - state.camera.y) / state.camera.zoom;
+    q = (2 / 3 * worldX) / HEX_SIZE;
+    r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / HEX_SIZE;
+    if (q < minQ) minQ = q; if (q > maxQ) maxQ = q;
+    if (r < minR) minR = r; if (r > maxR) maxR = r;
 
-        if (q < minQ) minQ = q;
-        if (q > maxQ) maxQ = q;
-        if (r < minR) minR = r;
-        if (r > maxR) maxR = r;
-    });
+    // Corner 3: 0,h
+    worldX = (-cx - state.camera.x) / state.camera.zoom;
+    worldY = (h - cy - state.camera.y) / state.camera.zoom;
+    q = (2 / 3 * worldX) / HEX_SIZE;
+    r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / HEX_SIZE;
+    if (q < minQ) minQ = q; if (q > maxQ) maxQ = q;
+    if (r < minR) minR = r; if (r > maxR) maxR = r;
 
-    return {
-        qMin: Math.floor(minQ) - 1,
-        qMax: Math.ceil(maxQ) + 1,
-        rMin: Math.floor(minR) - 1,
-        rMax: Math.ceil(maxR) + 1
-    };
+    // Corner 4: w,h
+    worldX = (w - cx - state.camera.x) / state.camera.zoom;
+    worldY = (h - cy - state.camera.y) / state.camera.zoom;
+    q = (2 / 3 * worldX) / HEX_SIZE;
+    r = (-1 / 3 * worldX + Math.sqrt(3) / 3 * worldY) / HEX_SIZE;
+    if (q < minQ) minQ = q; if (q > maxQ) maxQ = q;
+    if (r < minR) minR = r; if (r > maxR) maxR = r;
+
+    visibleBounds.qMin = Math.floor(minQ) - 1;
+    visibleBounds.qMax = Math.ceil(maxQ) + 1;
+    visibleBounds.rMin = Math.floor(minR) - 1;
+    visibleBounds.rMax = Math.ceil(maxR) + 1;
+    return visibleBounds;
 }
+const visibleBounds = { qMin: 0, qMax: 0, rMin: 0, rMax: 0 };
 
 function drawBackground(ctx) {
     if (state.bgSprites.length < 3) return;
@@ -2423,27 +2461,48 @@ function drawWater(ctx) {
 
     // Helper to find minimal distance to land (Breadth/Ring-First Search)
     // Helper to find minimal distance to land (Breadth/Ring-First Search)
-    const getLandDistance = (startHex, maxDist) => {
-        const key = startHex.toString();
+    // Optimization: Bitwise key for cache (supports range +/- 32000)
+    // Key = (q + 32000) << 16 | (r + 32000)
+    const OFFSET = 32000;
+
+    // Explicit raw neighbors for performance (q, r changes)
+    // 0: +1, 0  | 1: +1, -1 | 2: 0, -1 | 3: -1, 0 | 4: -1, +1 | 5: 0, +1
+    const NQ = [1, 1, 0, -1, -1, 0];
+    const NR = [0, -1, -1, 0, 1, 1];
+
+    const getLandDistance = (startQ, startR, maxDist) => {
+        // Fast Cache Lookup
+        const key = (startQ + OFFSET) << 16 | (startR + OFFSET);
         if (state.waterCache && state.waterCache.has(key)) {
             return state.waterCache.get(key);
         }
 
-        // Optimization: Check rings outward
+        // Optimization: Use raw coordinates to avoid Hex object creation
+        // Check rings outward
         for (let d = 1; d <= maxDist; d++) {
             // Generate ring d
             // Start point: startHex + direction[4] * d
-            let current = startHex.add(Hex.directions[4].scale(d));
+            // direction[4] is (-1, 1)
+            let currQ = startQ + (-1 * d);
+            let currR = startR + (1 * d);
 
             for (let i = 0; i < 6; i++) {
-                const dir = Hex.directions[i];
                 for (let j = 0; j < d; j++) {
-                    if (state.grid.has(current.toString())) {
+                    // Check if exists in grid (using string key for grid as it's Map<string, cell>)
+                    // We must construct the string key for the grid check :( 
+                    // But we can optimize this if the grid used numeric keys too... 
+                    // For now, construct the string key only when checking the grid.
+                    // This is still 1 string per ring-step.
+                    const gridKey = `${currQ},${currR}`;
+                    if (state.grid.has(gridKey)) {
                         if (!state.waterCache) state.waterCache = new Map();
                         state.waterCache.set(key, d);
                         return d;
                     }
-                    current = current.add(dir);
+
+                    // Move to next in ring
+                    currQ += NQ[i];
+                    currR += NR[i];
                 }
             }
         }
@@ -2456,12 +2515,9 @@ function drawWater(ctx) {
     // Iterate visible grid
     for (let r = bounds.rMin; r <= bounds.rMax; r++) {
         for (let q = bounds.qMin; q <= bounds.qMax; q++) {
-            const h = new Hex(q, r);
-            const hexStr = h.toString();
-
             // Calculate opacity: 80% at dist 1, +5% each step, max 90%
             const maxDist = 7;
-            const dist = getLandDistance(h, maxDist);
+            const dist = getLandDistance(q, r, maxDist);
 
             // Formula: 0.8 + (dist - 1) * 0.05
             // Cap at 0.9
@@ -2646,3 +2702,21 @@ window.addEventListener('mousemove', (e) => {
         }
     }
 });
+
+// --- Toast Notification ---
+function showToast(message, duration = 3000) {
+    const toast = document.getElementById('turn-toast');
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    toast.classList.add('visible');
+
+    // Clear any existing timeout to avoid premature hiding if called rapidly
+    if (state.toastTimeout) clearTimeout(state.toastTimeout);
+
+    state.toastTimeout = setTimeout(() => {
+        toast.classList.remove('visible');
+    }, duration);
+}
+
