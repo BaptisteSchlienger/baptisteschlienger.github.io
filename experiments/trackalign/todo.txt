@@ -1,0 +1,25 @@
+Note:
+for development and debugging purposes, always use the sample file (clean_tracks_sample.json).
+
+Context:
+clean_tracks_sample.json contains a list of race tracks with Open Street Map GPS polyline 
+as well as image pixel coordinate polyline of the track and features on the track (start/finish line, pitlane, pit entry/exit)
+the images that gave these features are stored in /assets/tracks/ (but they are labeled under Results_v2/Results/ in the file).
+
+Goal:
+Create a tool that displays the GPS polyline on OSM and the image polyline on top. 
+The user will use multiple controls to drag/zoom/stretch the image polyline to line it up with the OSM track.
+The goal is to create a formula for each track to translate the image coordinates to GPS coordinates, 
+in order to then get the GPS coordinates of the different image features (sf line, pitlane, pitlane entry/exit, turns and straight line name ...etc)
+Also let the user be able to correct the following:
+ - the text of the turns and straight line name
+ - the coordinates of the image features (sf line, pitlane entry/exit)
+ - the pitlane polyline (show the points and let the user move/remove/add them)
+
+then add an export button to allow the user to export the completed json object
+also add a way to let the user select which track he wishes to align/edit.
+
+Note:
+tracks are grouped together under the "venue" name, because the same track can have multiple different layouts. 
+So when one track in the venue is aligned we can use the same alignement formula to automatically align the rest of the track layouts in that same venue.
+Still let the user have the option to verify and validate the placement of the image features.
