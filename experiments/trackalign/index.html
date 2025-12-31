@@ -24,13 +24,22 @@
             <div class="control-group">
                 <h3>Selection</h3>
                 <label>Venue</label>
-                <select id="venue-select">
-                    <option>Loading...</option>
-                </select>
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <select id="venue-select" style="flex-grow: 1;">
+                        <option>Loading...</option>
+                    </select>
+                    <button id="btn-create-venue" class="icon-btn" style="width: 30px;" title="New Venue"><i
+                            class="fa-solid fa-plus"></i></button>
+                </div>
+
                 <label>Track Layout</label>
-                <select id="track-select" disabled>
-                    <option value="">Select Track...</option>
-                </select>
+                <div style="display: flex; gap: 5px;">
+                    <select id="track-select" disabled style="flex-grow: 1;">
+                        <option value="">Select Track...</option>
+                    </select>
+                    <button id="btn-create-track" class="icon-btn" style="width: 30px;" title="New Track" disabled><i
+                            class="fa-solid fa-plus"></i></button>
+                </div>
             </div>
 
             <!-- Tools Section -->
@@ -105,17 +114,74 @@
 
     <div id="map"></div>
 
-    <!-- Reference Window -->
-    <div id="ref-window" class="hidden">
+    <!-- Reference Image Window -->
+    <div id="ref-window" class="ref-window hidden">
         <div class="ref-header">
             <span>Reference Image</span>
-            <div>
-                <button id="maximize-ref" style="margin-right: 5px;">+</button>
+            <div class="ref-controls">
+                <button id="maximize-ref">max</button>
                 <button id="toggle-ref">-</button>
             </div>
         </div>
-        <div class="ref-content">
-            <img id="ref-img" src="" alt="Reference">
+        <img id="ref-img" src="" alt="Reference Map">
+    </div>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Import Features</h3>
+            <p>Found modifications in other tracks.</p>
+            <div style="margin-bottom: 15px;">
+                <label for="import-source-select" style="display:block; color:#ccc; margin-bottom:5px;">Import
+                    from:</label>
+                <select id="import-source-select"
+                    style="width:100%; padding: 5px; background:#333; color:#fff; border:1px solid #444; border-radius:4px;"></select>
+            </div>
+            <div class="import-options">
+                <label><input type="checkbox" id="import-sf" checked> SF Line</label>
+                <label><input type="checkbox" id="import-pit" checked> Pitlane (Entry/Exit/Trace)</label>
+                <label><input type="checkbox" id="import-geo" checked> Track Geometry</label>
+                <label><input type="checkbox" id="import-turns" checked> Turns & Straights</label>
+                <label><input type="checkbox" id="import-curbs" checked> Curbs</label>
+            </div>
+            <div class="modal-actions">
+                <button id="btn-import-cancel" class="flat-btn">Cancel</button>
+                <button id="btn-import-confirm" class="primary-btn">Import Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Venue Modal -->
+    <div id="create-venue-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>New Venue</h3>
+            <div class="form-group">
+                <label>Venue Name</label>
+                <input type="text" id="new-venue-name" placeholder="e.g. Silverstone">
+            </div>
+            <div class="form-group">
+                <label>Address / Location</label>
+                <input type="text" id="new-venue-address" placeholder="e.g. Silverstone Circuit, UK">
+            </div>
+            <div class="modal-actions">
+                <button id="btn-create-venue-cancel" class="flat-btn">Cancel</button>
+                <button id="btn-create-venue-confirm" class="primary-btn">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Track Modal -->
+    <div id="create-track-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>New Track</h3>
+            <div class="form-group">
+                <label>Track Name / Layout</label>
+                <input type="text" id="new-track-name" placeholder="e.g. Grand Prix Layout">
+            </div>
+            <div class="modal-actions">
+                <button id="btn-create-track-cancel" class="flat-btn">Cancel</button>
+                <button id="btn-create-track-confirm" class="primary-btn">Create</button>
+            </div>
         </div>
     </div>
 

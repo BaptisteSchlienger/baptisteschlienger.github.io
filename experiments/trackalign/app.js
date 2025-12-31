@@ -3,6 +3,7 @@
 const state = {
     tracks: [],
     venues: {},
+    venueLocations: {}, // Map<VenueName, {lat, lon}>
     currentTrack: null,
 
     // UI State
@@ -90,6 +91,8 @@ async function init() {
         setupEventListeners();
         setupMapInteractions();
         setupKeyboardControls();
+        setupImportListeners();
+        setupCreationListeners();
 
         console.log(`Loaded ${state.tracks.length} tracks.`);
 
@@ -99,7 +102,7 @@ async function init() {
     }
 }
 
-function populateVenueSelect() {
+function populateVenueSelect(selectedVenue = null) {
     const sel = document.getElementById('venue-select');
     sel.innerHTML = '<option value="">Select Venue...</option>';
 
@@ -107,23 +110,133 @@ function populateVenueSelect() {
         const opt = document.createElement('option');
         opt.value = v;
         opt.textContent = `${v} (${state.venues[v].length})`;
+        if (v === selectedVenue) opt.selected = true;
         sel.appendChild(opt);
     });
+
+    // Enable Create Venue button? Always enabled.
 }
 
-function updateTrackSelect(venue) {
+function updateTrackSelect(venue, selectedTrackId = null) {
     const sel = document.getElementById('track-select');
     sel.innerHTML = '<option value="">Select Track...</option>';
     sel.disabled = !venue;
+    document.getElementById('btn-create-track').disabled = !venue; // Enable create track only if venue selected
 
     if (venue && state.venues[venue]) {
         state.venues[venue].forEach((t) => {
             const opt = document.createElement('option');
             opt.value = t.track_id;
             opt.textContent = t.layout_name || t.track_id;
+            if (t.track_id === selectedTrackId) opt.selected = true;
             sel.appendChild(opt);
         });
     }
+}
+
+function setupCreationListeners() {
+    // Venue Creation
+    const venueModal = document.getElementById('create-venue-modal');
+    document.getElementById('btn-create-venue').addEventListener('click', () => {
+        document.getElementById('new-venue-name').value = '';
+        document.getElementById('new-venue-address').value = '';
+        venueModal.classList.remove('hidden');
+    });
+    document.getElementById('btn-create-venue-cancel').addEventListener('click', () => {
+        venueModal.classList.add('hidden');
+    });
+    document.getElementById('btn-create-venue-confirm').addEventListener('click', async () => {
+        const name = document.getElementById('new-venue-name').value.trim();
+        const addr = document.getElementById('new-venue-address').value.trim();
+        if (!name) return alert("Venue name required");
+
+        if (state.venues[name]) return alert("Venue already exists");
+
+        // Create new venue entry
+        state.venues[name] = [];
+
+        // Geocode Address
+        if (addr) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}`);
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    state.venueLocations[name] = { lat, lon };
+                    console.log(`Geocoded '${addr}': ${lat}, ${lon}`);
+                } else {
+                    alert("Address not found. Venue created without coordinates.");
+                }
+            } catch (e) {
+                console.error("Geocoding failed", e);
+                alert("Geocoding failed. Check console.");
+            }
+        }
+
+        venueModal.classList.add('hidden');
+        populateVenueSelect(name); // Select it
+        updateTrackSelect(name); // Refresh track list (empty)
+
+        // Trigger change to update global state?
+        // We simulate selecting it.
+        // document.getElementById('venue-select').value = name; // Already set by populate param
+        // But need to trigger updateTrackSelect? Added above.
+    });
+
+    // Track Creation
+    const trackModal = document.getElementById('create-track-modal');
+    document.getElementById('btn-create-track').addEventListener('click', () => {
+        document.getElementById('new-track-name').value = '';
+        trackModal.classList.remove('hidden');
+    });
+    document.getElementById('btn-create-track-cancel').addEventListener('click', () => {
+        trackModal.classList.add('hidden');
+    });
+    document.getElementById('btn-create-track-confirm').addEventListener('click', () => {
+        const name = document.getElementById('new-track-name').value.trim();
+        if (!name) return alert("Track Name required");
+
+        const venue = document.getElementById('venue-select').value;
+        if (!venue) return alert("Select a venue first");
+
+        // Resolve Center
+        let center = { lat: 0, lon: 0 };
+        if (state.venueLocations[venue]) {
+            center = state.venueLocations[venue];
+        } else {
+            // Default to current map center if no venue location?
+            // Or Keep 0,0
+            const c = map.getCenter();
+            center = { lat: c.lat, lon: c.lng };
+        }
+
+        // Create Track Object
+        const newTrack = {
+            track_id: Date.now().toString(), // Simple ID
+            venue: venue,
+            layout_name: name,
+            center: center,
+            geometry: {
+                main: {
+                    polyline_geo: [
+                        [center.lon - 0.002, center.lat],
+                        [center.lon + 0.002, center.lat]
+                    ]
+                }
+            },
+            turns: [],
+            curbs: [],
+            source_urls: { image: "" } // No image yet
+        };
+
+        state.tracks.push(newTrack);
+        state.venues[venue].push(newTrack);
+
+        trackModal.classList.add('hidden');
+        updateTrackSelect(venue, newTrack.track_id);
+        loadTrack(newTrack.track_id);
+    });
 }
 
 
@@ -137,7 +250,7 @@ function loadTrack(trackId) {
     // ensure curbs array exists
     if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
 
-    state.pitLanePoints = [];
+    state.pitLanePoints = state.currentTrack._pit_path ? [...state.currentTrack._pit_path] : [];
     state.editingMode = null;
     state.selectedTrackPointIndex = null;
 
@@ -170,6 +283,85 @@ function loadTrack(trackId) {
     renderTrackWidth();
 
     updateFeatureList();
+
+    // 5. Check for Imports
+    checkForSiblingEdits(track);
+}
+
+function checkForSiblingEdits(track) {
+    if (!track.venue) return;
+
+    const siblings = state.tracks.filter(t => t.venue === track.venue && t.track_id !== track.track_id);
+    const updatedSiblings = siblings.filter(t => {
+        // Simple heuristic for "edited"
+        return (t._sf_point || t._pit_entry || t._pit_exit || (t.curbs && t.curbs.length > 0) || (t.turns && t.turns.some(turn => turn.geo_point)));
+    });
+
+    if (updatedSiblings.length > 0) {
+        const modal = document.getElementById('import-modal');
+        const select = document.getElementById('import-source-select');
+        select.innerHTML = '';
+
+        updatedSiblings.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.track_id;
+            opt.textContent = s.layout_name || s.track_id;
+            select.appendChild(opt);
+        });
+
+        modal.classList.remove('hidden');
+    }
+}
+
+function setupImportListeners() {
+    document.getElementById('btn-import-cancel').addEventListener('click', () => {
+        document.getElementById('import-modal').classList.add('hidden');
+    });
+
+    document.getElementById('btn-import-confirm').addEventListener('click', () => {
+        const select = document.getElementById('import-source-select');
+        const sourceId = select.value;
+        const sourceTrack = state.tracks.find(t => t.track_id === sourceId);
+
+        if (!sourceTrack) return;
+
+        const target = state.currentTrack;
+
+        if (document.getElementById('import-sf').checked) {
+            target._sf_point = sourceTrack._sf_point ? { ...sourceTrack._sf_point } : undefined;
+        }
+        if (document.getElementById('import-pit').checked) {
+            target._pit_entry = sourceTrack._pit_entry ? { ...sourceTrack._pit_entry } : undefined;
+            target._pit_exit = sourceTrack._pit_exit ? { ...sourceTrack._pit_exit } : undefined;
+            if (sourceTrack._pit_path) {
+                target._pit_path = [...sourceTrack._pit_path];
+                state.pitLanePoints = [...target._pit_path]; // Immediate update
+            }
+        }
+        if (document.getElementById('import-geo').checked) {
+            if (sourceTrack.geometry && sourceTrack.geometry.main && sourceTrack.geometry.main.polyline_geo) {
+                saveTrackHistory();
+                target.geometry.main.polyline_geo = JSON.parse(JSON.stringify(sourceTrack.geometry.main.polyline_geo));
+            }
+        }
+        if (document.getElementById('import-turns').checked) {
+            if (sourceTrack.turns) {
+                target.turns = JSON.parse(JSON.stringify(sourceTrack.turns));
+            }
+        }
+        if (document.getElementById('import-curbs').checked) {
+            if (sourceTrack.curbs) {
+                target.curbs = JSON.parse(JSON.stringify(sourceTrack.curbs));
+            }
+        }
+
+        renderOSMTrack();
+        renderFeatures();
+        updateFeatureList();
+        updateCurbList();
+        updateUIButtons();
+        document.getElementById('import-modal').classList.add('hidden');
+    });
 }
 
 function loadRefImage(track) {
@@ -682,6 +874,10 @@ function renderFeatures() {
         });
     }
     renderPitWidth();
+    // Sync Pit Path to Track Object
+    if (state.currentTrack) {
+        state.currentTrack._pit_path = state.pitLanePoints; // Reference copy
+    }
 }
 
 // --- Geometry Utils ---
