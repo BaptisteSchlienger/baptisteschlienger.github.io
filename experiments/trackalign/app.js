@@ -246,16 +246,19 @@ function setupCreationListeners() {
             venue: venue,
             track_name: venue, // Use the selected group as track_name
             layout_name: name,
-            center: center,
-            geometry: {
-                main: {
-                    polyline_geo: [
-                        [center.lon - 0.002, center.lat],
-                        [center.lon + 0.002, center.lat]
-                    ]
+            center: {
+                geo_point: {
+                    _latitude: center.lat,
+                    _longitude: center.lon
                 }
             },
-            turns: [],
+            track_geometry: {
+                polyline_geo: [
+                    { _latitude: center.lat - 0.002, _longitude: center.lon },
+                    { _latitude: center.lat + 0.002, _longitude: center.lon }
+                ]
+            },
+            turns_and_straights: [],
             curbs: [],
             source_urls: { image: "" } // No image yet
         };
@@ -320,17 +323,20 @@ async function loadTrack(trackId) {
 
         const data = responseData.data || responseData;
 
-        const fullTrack = Array.isArray(data) ? data[0] : data;
+        const apiTrack = Array.isArray(data) ? data[0] : data;
 
-        if (!fullTrack) throw new Error("Track not found in API response");
+        if (!apiTrack) throw new Error("Track not found in API response");
 
-        // Merge into state or replace?
-        // Replace currentTrack
-        state.currentTrack = fullTrack;
+        // Use API format directly
+        state.currentTrack = apiTrack;
+
+        // Ensure arrays exist
+        if (!state.currentTrack.turns_and_straights) state.currentTrack.turns_and_straights = [];
+        if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
 
         // Update the list entry in state.tracks with full data too?
         const idx = state.tracks.findIndex(t => t.id === trackId);
-        if (idx !== -1) state.tracks[idx] = fullTrack;
+        if (idx !== -1) state.tracks[idx] = apiTrack;
 
     } catch (e) {
         console.error("Load Track Error", e);
@@ -348,11 +354,11 @@ async function loadTrack(trackId) {
     state.selectedTrackPointIndex = null;
 
     // History Init
-    if (state.currentTrack.geometry && state.currentTrack.geometry.main && state.currentTrack.geometry.main.polyline_geo) {
-        state.originalTrackGeo = JSON.parse(JSON.stringify(state.currentTrack.geometry.main.polyline_geo));
+    if (state.currentTrack.track_geometry && state.currentTrack.track_geometry.polyline_geo) {
+        state.originalTrackGeo = JSON.parse(JSON.stringify(state.currentTrack.track_geometry.polyline_geo));
     } else {
         // Handle empty geometry
-        if (!state.currentTrack.geometry) state.currentTrack.geometry = { main: { polyline_geo: [] } };
+        if (!state.currentTrack.track_geometry) state.currentTrack.track_geometry = { polyline_geo: [] };
     }
     state.trackHistory = [];
 
@@ -361,12 +367,14 @@ async function loadTrack(trackId) {
     console.log("Loaded Track:", track);
 
     // 1. Center Map
-    if (track.center) {
-        map.setView([track.center.lat, track.center.lon], 16);
-    } else if (track.geometry.main.polyline_geo && track.geometry.main.polyline_geo.length > 0) {
-        const p = track.geometry.main.polyline_geo[0];
-        map.setView([p[1], p[0]], 16);
+    if (track.center?.geo_point) {
+        map.setView([track.center.geo_point._latitude, track.center.geo_point._longitude], 16);
+    } else if (track.track_geometry?.polyline_geo && track.track_geometry.polyline_geo.length > 0) {
+        const p = track.track_geometry.polyline_geo[0];
+        map.setView([p._latitude, p._longitude], 16);
     }
+
+    loadRefImage(track);
 
     // 2. Render OSM Track
     renderOSMTrack();
@@ -390,7 +398,7 @@ function checkForSiblingEdits(track) {
     const siblings = state.tracks.filter(t => t.venue === track.venue && t.id !== track.id);
     const updatedSiblings = siblings.filter(t => {
         // Simple heuristic for "edited"
-        return (t._sf_point || t._pit_entry || t._pit_exit || (t.curbs && t.curbs.length > 0) || (t.turns && t.turns.some(turn => turn.geo_point)));
+        return (t._sf_point || t._pit_entry || t._pit_exit || (t.curbs && t.curbs.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
     });
 
     if (updatedSiblings.length > 0) {
@@ -435,14 +443,14 @@ function setupImportListeners() {
             }
         }
         if (document.getElementById('import-geo').checked) {
-            if (sourceTrack.geometry && sourceTrack.geometry.main && sourceTrack.geometry.main.polyline_geo) {
+            if (sourceTrack.track_geometry?.polyline_geo) {
                 saveTrackHistory();
-                target.geometry.main.polyline_geo = JSON.parse(JSON.stringify(sourceTrack.geometry.main.polyline_geo));
+                target.track_geometry.polyline_geo = JSON.parse(JSON.stringify(sourceTrack.track_geometry.polyline_geo));
             }
         }
         if (document.getElementById('import-turns').checked) {
-            if (sourceTrack.turns) {
-                target.turns = JSON.parse(JSON.stringify(sourceTrack.turns));
+            if (sourceTrack.turns_and_straights) {
+                target.turns_and_straights = JSON.parse(JSON.stringify(sourceTrack.turns_and_straights));
             }
         }
         if (document.getElementById('import-curbs').checked) {
@@ -474,9 +482,29 @@ function loadRefImage(track) {
     }
 }
 
+function loadRefImage(track) {
+    if (!track?.source_urls?.saved_image_location) {
+        document.getElementById('ref-window').classList.add('hidden');
+        return;
+    }
+
+    let imgUrl = track.source_urls.saved_image_location;
+    const refWindow = document.getElementById('ref-window');
+    const img = document.getElementById('ref-img');
+
+    if (imgUrl) {
+        imgUrl = imgUrl.replace('Results_v2/Results/', 'assets/tracks/');
+        img.src = imgUrl;
+        refWindow.classList.remove('hidden');
+    } else {
+        refWindow.classList.add('hidden');
+    }
+}
+
 function saveTrackHistory() {
-    if (!state.currentTrack?.geometry?.main?.polyline_geo) return;
-    const geoCopy = JSON.parse(JSON.stringify(state.currentTrack.geometry.main.polyline_geo));
+    // Use correct path for history
+    if (!state.currentTrack?.track_geometry?.polyline_geo) return;
+    const geoCopy = JSON.parse(JSON.stringify(state.currentTrack.track_geometry.polyline_geo));
     state.trackHistory.push(geoCopy);
     if (state.trackHistory.length > 20) state.trackHistory.shift();
     updateUIButtons();
@@ -488,10 +516,12 @@ function renderOSMTrack() {
     if (!state.layers.trackPoints) state.layers.trackPoints = L.layerGroup().addTo(map);
     state.layers.trackPoints.clearLayers();
 
-    const geoPoints = state.currentTrack.geometry.main.polyline_geo;
+    // Use correct path
+    const geoPoints = state.currentTrack?.track_geometry?.polyline_geo;
     if (!geoPoints || geoPoints.length === 0) return;
 
-    const latLngs = geoPoints.map(p => [p[1], p[0]]);
+    // Map internal structure to Leaflet [lat, lon]
+    const latLngs = geoPoints.map(p => [p._latitude, p._longitude]);
 
     state.layers.osm = L.polyline(latLngs, {
         color: '#ff3333',
@@ -504,6 +534,9 @@ function renderOSMTrack() {
         state.layers.trackPoints.addTo(map);
 
         geoPoints.forEach((p, i) => {
+            const lat = p._latitude;
+            const lon = p._longitude;
+
             const isSelected = (i === state.selectedTrackPointIndex);
             const isStart = (i === 0);
             const isEnd = (i === geoPoints.length - 1);
@@ -516,9 +549,6 @@ function renderOSMTrack() {
                     if (i === state.deleteRangeStart) {
                         color = 'orange'; // Start point
                     }
-                    // No preview of range here, handled in move/interaction? 
-                    // Or we could preview if we knew the end point (hover).
-                    // For now, just highlight Start.
                 }
             } else {
                 if (!isSelected) {
@@ -528,7 +558,7 @@ function renderOSMTrack() {
             }
 
             // Visible point
-            const visibleMarker = L.circleMarker([p[1], p[0]], {
+            const visibleMarker = L.circleMarker([lat, lon], {
                 color: color,
                 fillColor: isSelected ? '#0088ff' : '#333',
                 fillOpacity: 1,
@@ -539,7 +569,7 @@ function renderOSMTrack() {
             }).addTo(state.layers.trackPoints);
 
             // Hit target
-            const inputM = L.circleMarker([p[1], p[0]], {
+            const inputM = L.circleMarker([lat, lon], {
                 color: 'transparent',
                 fillColor: 'transparent',
                 radius: 12, // Large hit area
@@ -635,8 +665,8 @@ function handlePointClick(index) {
             // So we can highlight red, then alert.
 
             // Let's create a temporary red polyline to show what will be deleted
-            const geo = state.currentTrack.geometry.main.polyline_geo;
-            const segment = geo.slice(min, max + 1).map(p => [p[1], p[0]]);
+            const geo = state.currentTrack.track_geometry.polyline_geo;
+            const segment = geo.slice(min, max + 1).map(p => [p._latitude, p._longitude]);
 
             const redLine = L.polyline(segment, { color: 'red', weight: 6, opacity: 0.8 }).addTo(map);
 
@@ -645,7 +675,7 @@ function handlePointClick(index) {
                     saveTrackHistory();
                     // Remove points.
                     // If we remove min to max inclusive:
-                    state.currentTrack.geometry.main.polyline_geo.splice(min, count);
+                    state.currentTrack.track_geometry.polyline_geo.splice(min, count);
 
                     // Reset
                     state.deleteRangeStart = null;
@@ -677,7 +707,7 @@ function handlePointClick(index) {
             saveTrackHistory();
             const min = Math.min(i, j);
             const max = Math.max(i, j);
-            const geo = state.currentTrack.geometry.main.polyline_geo;
+            const geo = state.currentTrack.track_geometry.polyline_geo;
 
             // Check for Loop Closure (Start <-> End)
             if (min === 0 && max === geo.length - 1) {
@@ -690,12 +720,12 @@ function handlePointClick(index) {
                 // But usually, "Click" means "Add segment".
 
                 // Check exact equality to prevent infinite stacking if user keeps clicking
-                if (pStart[0] === pEnd[0] && pStart[1] === pEnd[1]) {
+                if (pStart._longitude === pEnd._longitude && pStart._latitude === pEnd._latitude) {
                     console.log("Loop already closed");
                     state.selectedTrackPointIndex = null; // Auto deselect
                 } else {
                     // Append a new point closing the loop
-                    geo.push([pStart[0], pStart[1]]);
+                    geo.push({ _longitude: pStart._longitude, _latitude: pStart._latitude });
                     state.selectedTrackPointIndex = null; // Auto deselect
                     console.log("Closed Loop (Appended Point)");
                 }
@@ -733,7 +763,7 @@ function handlePointClick(index) {
 function handleCurbClick(index, e) {
     if (state.activeCurbIndex === null) return;
     const curb = state.currentTrack.curbs[state.activeCurbIndex];
-    const geo = state.currentTrack.geometry.main.polyline_geo;
+    const geo = state.currentTrack.track_geometry.polyline_geo;
 
     if (state.editingMode === 'DEFINE_CURB_START') {
         curb.start_index = index;
@@ -746,8 +776,8 @@ function handleCurbClick(index, e) {
         const pPrev = geo[Math.max(index - 1, 0)];
 
         // Vector of track
-        let dx = pNext[0] - pPrev[0];
-        let dy = pNext[1] - pPrev[1];
+        let dx = pNext._longitude - pPrev._longitude;
+        let dy = pNext._latitude - pPrev._latitude;
         // Normalize
         const len = Math.sqrt(dx * dx + dy * dy);
         dx /= len; dy /= len;
@@ -767,8 +797,8 @@ function handleCurbClick(index, e) {
         // Cross product Z = dx*cy - dy*cx
         // If Z > 0 => Left, Z < 0 => Right (Coordinate system dependent)
 
-        const cLon = e.latlng.lng - p[0];
-        const cLat = e.latlng.lat - p[1];
+        const cLon = e.latlng.lng - p._longitude;
+        const cLat = e.latlng.lat - p._latitude;
 
         const cross = dx * cLat - dy * cLon;
 
@@ -796,9 +826,9 @@ function handleCurbClick(index, e) {
 }
 
 function deletePoint(index) {
-    if (state.currentTrack.geometry.main.polyline_geo.length > 2) {
+    if (state.currentTrack.track_geometry.polyline_geo.length > 2) {
         saveTrackHistory();
-        state.currentTrack.geometry.main.polyline_geo.splice(index, 1);
+        state.currentTrack.track_geometry.polyline_geo.splice(index, 1);
         state.selectedTrackPointIndex = null;
         renderOSMTrack();
         renderTrackWidth();
@@ -809,10 +839,10 @@ function deletePoint(index) {
 function renderTrackWidth() {
     if (state.layers.trackWidth) map.removeLayer(state.layers.trackWidth);
 
-    const geoPoints = state.currentTrack.geometry.main.polyline_geo;
+    const geoPoints = state.currentTrack.track_geometry.polyline_geo;
     if (!geoPoints || geoPoints.length === 0) return;
 
-    const latLngs = geoPoints.map(p => [p[1], p[0]]);
+    const latLngs = geoPoints.map(p => [p._latitude, p._longitude]);
 
     const centerLat = map.getCenter().lat;
     const zoom = map.getZoom();
@@ -864,15 +894,15 @@ function renderFeatures() {
 
     if (state.currentTrack._sf_point) {
         // Find orientation
-        const geo = state.currentTrack.geometry.main.polyline_geo;
+        const geo = state.currentTrack.track_geometry.polyline_geo;
         const sfLatLng = state.currentTrack._sf_point;
         if (geo) {
-            const info = getNearestSegmentIndex(sfLatLng, geo);
+            const info = getNearestSegmentIndex(L.latLng(sfLatLng._latitude, sfLatLng._longitude), geo);
             if (info.index !== -1) {
                 const p1 = geo[info.index];
                 const p2 = geo[info.index + 1];
-                let dx = p2[0] - p1[0];
-                let dy = p2[1] - p1[1];
+                let dx = p2._longitude - p1._longitude;
+                let dy = p2._latitude - p1._latitude;
                 const len = Math.sqrt(dx * dx + dy * dy);
                 if (len > 0) {
                     dx /= len; dy /= len;
@@ -883,8 +913,8 @@ function renderFeatures() {
                     const offLon = (nx * widthMeters) / metersPerDegreeLon;
                     const offLat = (ny * widthMeters) / metersPerDegreeLat;
 
-                    const lineStart = [sfLatLng.lat + offLat, sfLatLng.lng + offLon];
-                    const lineEnd = [sfLatLng.lat - offLat, sfLatLng.lng - offLon];
+                    const lineStart = [sfLatLng._latitude + offLat, sfLatLng._longitude + offLon];
+                    const lineEnd = [sfLatLng._latitude - offLat, sfLatLng._longitude - offLon];
 
                     L.polyline([lineStart, lineEnd], { color: '#00ff00', weight: 4 }).addTo(state.layers.features).bindTooltip("Start/Finish Line");
                 }
@@ -893,15 +923,15 @@ function renderFeatures() {
     }
 
     if (state.currentTrack._pit_entry) {
-        L.circleMarker(state.currentTrack._pit_entry, { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit In");
+        L.circleMarker([state.currentTrack._pit_entry._latitude, state.currentTrack._pit_entry._longitude], { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit In");
     }
     if (state.currentTrack._pit_exit) {
-        L.circleMarker(state.currentTrack._pit_exit, { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit Out");
+        L.circleMarker([state.currentTrack._pit_exit._latitude, state.currentTrack._pit_exit._longitude], { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit Out");
     }
 
     if (state.currentTrack.curbs) {
         // Render Lines offset from track
-        const geo = state.currentTrack.geometry.main.polyline_geo;
+        const geo = state.currentTrack.track_geometry.polyline_geo;
 
         state.currentTrack.curbs.forEach((c, i) => {
             if (typeof c.start_index === 'number' && typeof c.end_index === 'number') {
@@ -911,8 +941,8 @@ function renderFeatures() {
                     // Calculate Normal
                     const pNext = geo[Math.min(k + 1, geo.length - 1)];
                     const pPrev = geo[Math.max(k - 1, 0)];
-                    let dx = pNext[0] - pPrev[0];
-                    let dy = pNext[1] - pPrev[1];
+                    let dx = pNext._longitude - pPrev._longitude;
+                    let dy = pNext._latitude - pPrev._latitude;
                     const len = Math.sqrt(dx * dx + dy * dy);
                     if (len === 0) continue;
                     dx /= len; dy /= len;
@@ -930,7 +960,7 @@ function renderFeatures() {
                     const offLon = (nx * widthMeters) / metersPerDegreeLon;
                     const offLat = (ny * widthMeters) / metersPerDegreeLat;
 
-                    pts.push([p[1] + offLat, p[0] + offLon]);
+                    pts.push([p._latitude + offLat, p._longitude + offLon]);
                 }
 
                 const isHighlighted = (i === state.highlightedCurbIndex);
@@ -945,10 +975,10 @@ function renderFeatures() {
             }
         });
     }
-    if (state.currentTrack.turns) {
-        state.currentTrack.turns.forEach((t, i) => {
+    if (state.currentTrack.turns_and_straights) {
+        state.currentTrack.turns_and_straights.forEach((t, i) => {
             if (t.geo_point) {
-                const m = L.circleMarker(t.geo_point, { color: 'yellow', radius: 4 }).addTo(state.layers.features);
+                const m = L.circleMarker([t.geo_point._latitude, t.geo_point._longitude], { color: 'yellow', radius: 4 }).addTo(state.layers.features);
                 m.bindTooltip(`${i + 1}: ${t.name || ''}`);
             }
         });
@@ -977,14 +1007,56 @@ function renderFeatures() {
 }
 
 // --- Geometry Utils ---
+// --- Helper Functions ---
+
+function restoreTrackHistory() {
+    if (state.trackHistory.length === 0) return;
+    const prevGeo = state.trackHistory.pop();
+    // Restore structure
+    state.currentTrack.track_geometry.polyline_geo = prevGeo;
+    renderOSMTrack();
+    renderFeatures();
+    updateUIButtons();
+    updateFeatureList();
+    updateCurbList();
+}
+
+function findNearestPointOnPolyline(latlng, polyline) {
+    let minDist = Infinity;
+    let nearestPoint = null;
+    let nearestIndex = -1;
+
+    // Use internal structure
+    const geoPoints = state.currentTrack.track_geometry.polyline_geo;
+    if (!geoPoints) return null;
+
+    // We can use built-in Leaflet utils if we map points, but manual is fine for exact points
+    // Actually, we usually want closest point on SEGMENT.
+    // L.GeometryUtil.closest(map, polyline, latlng) requires the layer.
+    // We have state.layers.osm.
+
+    if (state.layers.osm) {
+        // This returns LatLng object
+        const p = L.GeometryUtil.closest(map, state.layers.osm, latlng);
+        if (p) {
+            // Find segment index? Not easy.
+            // Let's implement simple point check if we only snap to vertices (which we don't, we want segments).
+            // But we accept the snapped point.
+            // Return { lat: p.lat, lon: p.lng }
+            return { lat: p.lat, lon: p.lng };
+        }
+    }
+    return null;
+}
+
 function getNearestPointOnPolyline(latlng, polylineGeo) {
     let minDist = Infinity;
     let nearestLatLng = null;
     for (let i = 0; i < polylineGeo.length - 1; i++) {
-        const lat1 = polylineGeo[i][1];
-        const lon1 = polylineGeo[i][0];
-        const lat2 = polylineGeo[i + 1][1];
-        const lon2 = polylineGeo[i + 1][0];
+        const lat1 = polylineGeo[i]._latitude;
+        const lon1 = polylineGeo[i]._longitude;
+        const lat2 = polylineGeo[i + 1]._latitude;
+        const lon2 = polylineGeo[i + 1]._longitude;
         const closest = getClosestPointOnSegment(latlng.lat, latlng.lng, lat1, lon1, lat2, lon2);
         const currentLatLng = L.latLng(closest.lat, closest.lng);
         const dist = latlng.distanceTo(currentLatLng);
@@ -1015,10 +1087,10 @@ function getNearestSegmentIndex(latlng, polylineGeo) {
     let index = -1;
     let insertionPoint = null;
     for (let i = 0; i < polylineGeo.length - 1; i++) {
-        const lat1 = polylineGeo[i][1];
-        const lon1 = polylineGeo[i][0];
-        const lat2 = polylineGeo[i + 1][1];
-        const lon2 = polylineGeo[i + 1][0];
+        const lat1 = polylineGeo[i]._latitude;
+        const lon1 = polylineGeo[i]._longitude;
+        const lat2 = polylineGeo[i + 1]._latitude;
+        const lon2 = polylineGeo[i + 1]._longitude;
         const closest = getClosestPointOnSegment(latlng.lat, latlng.lng, lat1, lon1, lat2, lon2);
         const currentLatLng = L.latLng(closest.lat, closest.lng);
         const dist = latlng.distanceTo(currentLatLng);
@@ -1056,7 +1128,7 @@ function setupMapInteractions() {
 
         // 2. Handle Real Track Drag
         if (state.draggingTrackPointIndex !== null && state.editingMode === 'EDIT_TRACK') {
-            state.currentTrack.geometry.main.polyline_geo[state.draggingTrackPointIndex] = [e.latlng.lng, e.latlng.lat];
+            state.currentTrack.track_geometry.polyline_geo[state.draggingTrackPointIndex] = { _longitude: e.latlng.lng, _latitude: e.latlng.lat };
             renderOSMTrack();
             renderTrackWidth();
             return;
@@ -1076,14 +1148,15 @@ function setupMapInteractions() {
 
             let startPoint = null;
             if (state.pitLanePoints.length > 0) startPoint = state.pitLanePoints[state.pitLanePoints.length - 1];
-            else if (state.currentTrack?._pit_entry) startPoint = state.currentTrack._pit_entry;
+            else if (state.currentTrack?._pit_entry) startPoint = L.latLng(state.currentTrack._pit_entry._latitude, state.currentTrack._pit_entry._longitude);
 
             let targetPoint = e.latlng;
             const pitExit = state.currentTrack?._pit_exit;
             if (pitExit) {
-                const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(pitExit));
+                const pitExitLatLng = L.latLng(pitExit._latitude, pitExit._longitude);
+                const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(pitExitLatLng));
                 if (dist < 20) {
-                    targetPoint = pitExit;
+                    targetPoint = pitExitLatLng;
                     L.circleMarker(targetPoint, { radius: 8, color: '#00ff00', fill: false }).addTo(state.layers.interaction);
                 }
             }
@@ -1095,7 +1168,7 @@ function setupMapInteractions() {
 
         // 5. Edit Track Ghosts
         if (state.editingMode === 'EDIT_TRACK') {
-            const geo = state.currentTrack?.geometry?.main?.polyline_geo;
+            const geo = state.currentTrack?.track_geometry?.polyline_geo;
             if (geo) {
                 // 5a. If Selection Active: Rubber band
                 if (state.selectedTrackPointIndex !== null) {
@@ -1103,7 +1176,7 @@ function setupMapInteractions() {
                     else state.layers.interaction = L.layerGroup().addTo(map);
 
                     const p = geo[state.selectedTrackPointIndex];
-                    const start = L.latLng(p[1], p[0]);
+                    const start = L.latLng(p._latitude, p._longitude);
 
                     L.polyline([start, e.latlng], { color: '#0088ff', weight: 1, dashArray: '4,4' }).addTo(state.layers.interaction);
                     return;
@@ -1111,7 +1184,7 @@ function setupMapInteractions() {
 
                 // 5b. Normal Ghost Insert Check
                 const closeToPoint = geo.some(p => {
-                    const pll = L.latLng(p[1], p[0]);
+                    const pll = L.latLng(p._latitude, p._longitude);
                     const pt = map.latLngToLayerPoint(pll);
                     const mousePt = map.latLngToLayerPoint(e.latlng);
                     return pt.distanceTo(mousePt) < 10;
@@ -1138,7 +1211,7 @@ function setupMapInteractions() {
         }
 
         // Standard Click Snap
-        const geo = state.currentTrack?.geometry?.main?.polyline_geo;
+        const geo = state.currentTrack?.track_geometry?.polyline_geo;
         if (!geo) return;
         const snapped = getNearestPointOnPolyline(e.latlng, geo);
         if (state.layers.interaction) state.layers.interaction.clearLayers();
@@ -1198,13 +1271,13 @@ function setupMapInteractions() {
             // If propagation stopped, `map.click` won't fire. 
             // Correct.
 
-            const geo = state.currentTrack?.geometry?.main?.polyline_geo;
+            const geo = state.currentTrack?.track_geometry?.polyline_geo;
             if (geo) {
                 // 1. If Selected: Insert point connected to it (Trace)
                 if (state.selectedTrackPointIndex !== null) {
                     saveTrackHistory();
                     const idx = state.selectedTrackPointIndex;
-                    geo.splice(idx + 1, 0, [e.latlng.lng, e.latlng.lat]);
+                    geo.splice(idx + 1, 0, { _longitude: e.latlng.lng, _latitude: e.latlng.lat });
                     state.selectedTrackPointIndex = idx + 1; // Advance selection
                     renderOSMTrack();
                     renderTrackWidth();
@@ -1213,7 +1286,7 @@ function setupMapInteractions() {
                     const info = getNearestSegmentIndex(e.latlng, geo);
                     if (info.index !== -1 && info.point) {
                         saveTrackHistory();
-                        geo.splice(info.index + 1, 0, [info.point.lng, info.point.lat]);
+                        geo.splice(info.index + 1, 0, { _longitude: info.point.lng, _latitude: info.point.lat });
                         renderOSMTrack();
                         renderTrackWidth();
                     }
@@ -1228,8 +1301,9 @@ function setupMapInteractions() {
             let shouldFinish = false;
             const pitExit = state.currentTrack?._pit_exit;
             if (pitExit) {
-                const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(pitExit));
-                if (dist < 20) { pointToAdd = pitExit; shouldFinish = true; }
+                const pitExitLatLng = L.latLng(pitExit._latitude, pitExit._longitude);
+                const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(pitExitLatLng));
+                if (dist < 20) { pointToAdd = pitExitLatLng; shouldFinish = true; }
             }
             state.pitLanePoints.push(pointToAdd);
             renderFeatures();
@@ -1239,15 +1313,15 @@ function setupMapInteractions() {
         }
 
         // Other Modes
-        const geo = state.currentTrack.geometry.main.polyline_geo;
+        const geo = state.currentTrack.track_geometry.polyline_geo;
         if (!geo) return;
         const snapped = getNearestPointOnPolyline(e.latlng, geo);
         if (!snapped) return;
 
         let autoExit = false;
-        if (state.editingMode === 'SF_LINE') { state.currentTrack._sf_point = snapped; autoExit = true; }
-        else if (state.editingMode === 'PIT_ENTRY') { state.currentTrack._pit_entry = snapped; autoExit = true; }
-        else if (state.editingMode === 'PIT_EXIT') { state.currentTrack._pit_exit = snapped; autoExit = true; }
+        if (state.editingMode === 'SF_LINE') { state.currentTrack._sf_point = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true; }
+        else if (state.editingMode === 'PIT_ENTRY') { state.currentTrack._pit_entry = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true; }
+        else if (state.editingMode === 'PIT_EXIT') { state.currentTrack._pit_exit = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true; }
         // ADD_CURB handled differently (via handleCurbClick in handlePointClick flow?) 
         // Actually, better to hook into handlePointClick for precision, but if they click map near point, we snap.
         // Let's use the explicit handlePointClick for precision, but if they click map near point, we snap.
@@ -1257,13 +1331,13 @@ function setupMapInteractions() {
             let nearestIdx = -1;
             let minD = Infinity;
             geo.forEach((p, i) => {
-                const pll = L.latLng(p[1], p[0]);
+                const pll = L.latLng(p._latitude, p._longitude);
                 const d = e.latlng.distanceTo(pll);
                 if (d < minD) { minD = d; nearestIdx = i; }
             });
 
             // If very close to a vertex, use it
-            const vertexSnapDist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(L.latLng(geo[nearestIdx][1], geo[nearestIdx][0])));
+            const vertexSnapDist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(L.latLng(geo[nearestIdx]._latitude, geo[nearestIdx]._longitude)));
 
             if (nearestIdx !== -1 && vertexSnapDist < 15) {
                 handleCurbClick(nearestIdx, e);
@@ -1275,7 +1349,7 @@ function setupMapInteractions() {
             if (info.point) {
                 // Insert new point at the projected location
                 saveTrackHistory();
-                geo.splice(info.index + 1, 0, [info.point.lng, info.point.lat]);
+                geo.splice(info.index + 1, 0, { _longitude: info.point.lng, _latitude: info.point.lat });
                 renderOSMTrack();
                 renderTrackWidth();
                 // Determine new index (it's info.index + 1)
@@ -1284,8 +1358,22 @@ function setupMapInteractions() {
             }
         }
 
+        else if (state.selectedTrackPointIndex === null && (state.editingMode === 'EDIT_TRACK' || state.editingMode === 'DELETE_RANGE')) {
+            // 2. Else: Insert point on nearest segment (Split Segment)
+            const info = getNearestSegmentIndex(e.latlng, geo);
+            if (info.index !== -1 && info.point) {
+                // Insert new point at the projected location
+                saveTrackHistory();
+                geo.splice(info.index + 1, 0, { _longitude: info.point.lng, _latitude: info.point.lat });
+                renderOSMTrack();
+                renderTrackWidth();
+                // Determine new index (it's info.index + 1)
+                state.selectedTrackPointIndex = info.index + 1;
+            }
+        }
+
         else if (state.editingMode === 'TURN_POINT' && state.activeTurnIndex !== null) {
-            state.currentTrack.turns[state.activeTurnIndex].geo_point = snapped; autoExit = true;
+            state.currentTrack.turns_and_straights[state.activeTurnIndex].geo_point = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true;
         }
 
         renderFeatures();
@@ -1383,7 +1471,7 @@ function setupEventListeners() {
     document.getElementById('btn-undo-track').addEventListener('click', () => {
         if (state.trackHistory.length > 0) {
             const prevGeo = state.trackHistory.pop();
-            state.currentTrack.geometry.main.polyline_geo = prevGeo;
+            state.currentTrack.track_geometry.polyline_geo = prevGeo;
             // Restore selection if valid? Maybe clear to be safe.
             state.selectedTrackPointIndex = null;
             renderOSMTrack();
@@ -1415,7 +1503,7 @@ function setupEventListeners() {
     document.getElementById('btn-reset-track').addEventListener('click', () => {
         if (state.originalTrackGeo) {
             if (confirm("Reset track geometry to original?")) {
-                state.currentTrack.geometry.main.polyline_geo = JSON.parse(JSON.stringify(state.originalTrackGeo));
+                state.currentTrack.track_geometry.polyline_geo = JSON.parse(JSON.stringify(state.originalTrackGeo));
                 state.trackHistory = [];
                 state.selectedTrackPointIndex = null;
                 renderOSMTrack();
@@ -1474,7 +1562,7 @@ function setMode(mode, turnIndex = null, curbIndex = null) {
         // Auto-Start Pit Trace
         if (mode === 'TRACE_PIT') {
             if (state.pitLanePoints.length === 0 && state.currentTrack && state.currentTrack._pit_entry) {
-                state.pitLanePoints.push(state.currentTrack._pit_entry);
+                state.pitLanePoints.push(L.latLng(state.currentTrack._pit_entry._latitude, state.currentTrack._pit_entry._longitude));
                 renderFeatures();
             }
         }
@@ -1544,10 +1632,10 @@ function updateUIButtons() {
         document.getElementById('btn-delete-point').disabled = (state.selectedTrackPointIndex === null);
 
         // Enable Delete Range if track exists
-        const hasTrack = state.currentTrack.geometry.main.polyline_geo && state.currentTrack.geometry.main.polyline_geo.length > 2;
+        const hasTrack = state.currentTrack.track_geometry.polyline_geo && state.currentTrack.track_geometry.polyline_geo.length > 2;
         if (btnDeleteRange) btnDeleteRange.disabled = !hasTrack;
 
-        document.getElementById('btn-reset-track').disabled = (!state.trackHistory.length && (!state.originalTrackGeo || JSON.stringify(state.originalTrackGeo) === JSON.stringify(state.currentTrack.geometry.main.polyline_geo)));
+        document.getElementById('btn-reset-track').disabled = (!state.trackHistory.length && (!state.originalTrackGeo || JSON.stringify(state.originalTrackGeo) === JSON.stringify(state.currentTrack.track_geometry.polyline_geo)));
 
     } else {
         // Disable EVERYTHING in the sidebar tools if no track is selected
@@ -1579,9 +1667,10 @@ function updateStatusIcon(btnId, complete) {
 function updateFeatureList() {
     const list = document.getElementById('feature-list');
     list.innerHTML = '';
-    if (!state.currentTrack) return;
-    const turns = state.currentTrack.turns || [];
-    turns.forEach((turn, index) => {
+
+    if (!state.currentTrack || !state.currentTrack.turns_and_straights) return;
+
+    state.currentTrack.turns_and_straights.forEach((turn, index) => {
         const div = document.createElement('div');
         div.className = 'feature-row';
 
