@@ -92,9 +92,14 @@ async function init() {
         setupMapInteractions();
         setupKeyboardControls();
         setupCreationListeners();
-        setupImportListeners();
         setupSettingsListeners();
         setupExportListener();
+        setupSaveListener();
+
+        // Filter Listener
+        document.getElementById('filter-non-modified').addEventListener('change', () => {
+            fetchTrackList(); // Refresh list on toggle
+        });
 
 
     } catch (e) {
@@ -106,7 +111,12 @@ async function fetchTrackList() {
     if (!state.apiKey) return;
     try {
         const token = await generateJWT(state.apiKey);
-        const res = await fetch(`${state.apiBase}/api-tracks-list`, {
+
+        // Check filter
+        const nonModified = document.getElementById('filter-non-modified')?.checked || false;
+        const query = nonModified ? '?non_modified=true' : '';
+
+        const res = await fetch(`${state.apiBase}/api-tracks-list${query}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error("Failed to fetch tracks");
@@ -278,7 +288,8 @@ function setupCreationListeners() {
             curbs: [],
             source_urls: { image: "" },
             country_code: meta.country_code,
-            street_address: meta.street_address
+            street_address: meta.street_address,
+            isNew: true // Flag for API saving
         };
 
         state.tracks.push(newTrack);
@@ -318,6 +329,13 @@ function setupSettingsListeners() {
 
 async function loadTrack(trackId) {
     console.log("Trying to load track: " + trackId);
+
+    // UI Loading State
+    const loader = document.getElementById('track-loader');
+    const select = document.getElementById('track-select');
+    if (loader) loader.style.display = 'inline-block';
+    if (select) select.disabled = true;
+
     // 1. Fetch Full Details
     try {
         const token = await generateJWT(state.apiKey);
@@ -363,6 +381,14 @@ async function loadTrack(trackId) {
         if (!state.currentTrack.pit.exit) state.currentTrack.pit.exit = { geo_point: null };
         if (!state.currentTrack.pit.polyline_geo) state.currentTrack.pit.polyline_geo = [];
 
+        // Ensure direction object exists (default to clockwise: true)
+        if (!state.currentTrack.direction) {
+            state.currentTrack.direction = { clockwise: true };
+        } else if (state.currentTrack.direction.clockwise === undefined || state.currentTrack.direction.clockwise === null) {
+            // If object exists but property is missing/null, default to true as per request
+            state.currentTrack.direction.clockwise = true;
+        }
+
         // Load Pit Lane Points for rendering/editing
         // Convert from API {_latitude, _longitude} to L.LatLng
         state.pitLanePoints = state.currentTrack.pit.polyline_geo.map(p => L.latLng(p._latitude, p._longitude));
@@ -407,6 +433,9 @@ async function loadTrack(trackId) {
         console.error("Load Track Error", e);
         alert("Failed to load track details.");
         return;
+    } finally {
+        if (loader) loader.style.display = 'none';
+        if (select) select.disabled = false;
     }
 
     const track = state.currentTrack;
@@ -558,6 +587,79 @@ function setupExportListener() {
         document.body.appendChild(downloadAnchorNode); // required for firefox
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
+    });
+}
+
+function setupSaveListener() {
+    document.getElementById('save-btn').addEventListener('click', async () => {
+        if (!state.currentTrack) return;
+
+        const saveBtn = document.getElementById('save-btn');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = "Saving...";
+        saveBtn.disabled = true;
+
+        try {
+            const track = JSON.parse(JSON.stringify(state.currentTrack));
+
+            // Cleanup internal fields
+            delete track._pit_path;
+            delete track._sf_point;
+            delete track._pit_entry;
+            delete track._pit_exit;
+
+            // Check if new or existing
+            const isNew = !!track.isNew;
+            delete track.isNew; // Don't send this flag to API
+
+            track.has_been_updated = true;
+
+            const endpoint = isNew ? '/api-tracks-add' : '/api-tracks-update';
+            const url = `${state.apiBase}${endpoint}`;
+
+            console.log(`Saving track to ${url}...`);
+
+            const token = await generateJWT(state.apiKey);
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(track)
+            });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Save failed: ${res.status} ${errText}`);
+            }
+
+            const responseData = await res.json();
+            console.log("Save success:", responseData);
+
+            // If new, update local state
+            if (isNew) {
+                state.currentTrack.isNew = false;
+                // If API returns a new ID, update it? 
+                // Usually APIs return the created object or ID.
+                // Assuming responseData.id or similar.
+                // For now, keep local ID unless we know API behavior.
+                // If API returns { id: "..." }, update logic here.
+                if (responseData.id) {
+                    // Update ID in state.tracks and venues ? 
+                    // Complex due to references. prefer reload or simple update if easy.
+                }
+            }
+
+            alert("Track saved successfully!");
+
+        } catch (e) {
+            console.error("Save Error", e);
+            alert("Error saving track: " + e.message);
+        } finally {
+            saveBtn.textContent = originalText;
+            saveBtn.disabled = false;
+        }
     });
 }
 
@@ -1746,10 +1848,22 @@ function updateUIButtons() {
 
         document.getElementById('btn-reset-track').disabled = (!state.trackHistory.length && (!state.originalTrackGeo || JSON.stringify(state.originalTrackGeo) === JSON.stringify(state.currentTrack.track_geometry.polyline_geo)));
 
+        // DIRECTION TOGGLE STATE
+        const radios = document.getElementsByName('direction');
+        radios.forEach(r => r.disabled = false);
+        const isClockwise = t.direction && t.direction.clockwise !== false; // Default true if null/undefined treated as default above
+
+        // Update UI
+        document.querySelector('input[name="direction"][value="cw"]').checked = isClockwise;
+        document.querySelector('input[name="direction"][value="ccw"]').checked = !isClockwise;
+
     } else {
         // Disable EVERYTHING in the sidebar tools if no track is selected
         const allBtns = document.querySelectorAll('.control-group button');
         allBtns.forEach(b => b.disabled = true);
+
+        const radios = document.getElementsByName('direction');
+        radios.forEach(r => r.disabled = true);
 
         const allInputs = document.querySelectorAll('.control-group input');
         allInputs.forEach(i => i.disabled = true);

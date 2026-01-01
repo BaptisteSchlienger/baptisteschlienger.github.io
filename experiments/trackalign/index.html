@@ -26,6 +26,9 @@
             <!-- Track Selection -->
             <div class="control-group">
                 <h3>Selection</h3>
+                <label style="display: block; margin-bottom: 10px; font-size: 0.9em; color: #aaa;">
+                    <input type="checkbox" id="filter-non-modified"> Show only unmodified
+                </label>
                 <label>Track Name</label>
                 <div style="display: flex; gap: 5px; margin-bottom: 10px;">
                     <select id="venue-select" style="flex-grow: 1;">
@@ -35,7 +38,8 @@
                             class="fa-solid fa-plus"></i></button>
                 </div>
 
-                <label>Track Layout</label>
+                <label>Track Layout <i id="track-loader" class="fa-solid fa-spinner fa-spin"
+                        style="display: none; margin-left: 5px; color: #aaa;"></i></label>
                 <div style="display: flex; gap: 5px;">
                     <select id="track-select" disabled style="flex-grow: 1;">
                         <option value="">Select Track...</option>
@@ -86,6 +90,17 @@
                     <input type="range" id="pit-width" min="2" max="20" step="0.5" value="5" disabled>
                     <span id="pit-width-val">5m</span>
                 </div>
+
+                <div class="slider-row"
+                    style="margin-top: 15px; display: flex; align-items: center; justify-content: space-between;">
+                    <label style="flex: 0 0 80px;">Direction</label>
+                    <div style="flex-grow: 1; display: flex; gap: 10px;">
+                        <label style="font-weight: normal; cursor: pointer;"><input type="radio" name="direction"
+                                value="cw" checked disabled> CW</label>
+                        <label style="font-weight: normal; cursor: pointer;"><input type="radio" name="direction"
+                                value="ccw" disabled> CCW</label>
+                    </div>
+                </div>
             </div>
 
             <!-- Features List (Turns) -->
@@ -110,7 +125,8 @@
             </div>
         </div>
 
-        <div style="padding: 15px; border-top: 1px solid #333;">
+        <div style="padding: 15px; border-top: 1px solid #333; display: flex; gap: 10px;">
+            <button id="save-btn" class="primary" style="background-color: #2da44e;">Save</button>
             <button id="export-btn" class="primary">Export JSON</button>
         </div>
     </div>
