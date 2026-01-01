@@ -91,9 +91,11 @@ async function init() {
         setupEventListeners();
         setupMapInteractions();
         setupKeyboardControls();
-        setupImportListeners();
         setupCreationListeners();
+        setupImportListeners();
         setupSettingsListeners();
+        setupExportListener();
+
 
     } catch (e) {
         console.error("Initialization failed:", e);
@@ -187,13 +189,22 @@ function setupCreationListeners() {
         // Geocode Address
         if (addr) {
             try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}`);
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(addr)}`);
                 const data = await response.json();
                 if (data && data.length > 0) {
                     const lat = parseFloat(data[0].lat);
                     const lon = parseFloat(data[0].lon);
-                    state.venueLocations[name] = { lat, lon };
-                    console.log(`Geocoded '${addr}': ${lat}, ${lon}`);
+
+                    const countryCode = data[0].address?.country_code || "";
+                    // Construct a street address if possible, or use display_name
+                    // display_name is long. address parts: road, house_number, suburb, city...
+                    // Let's use road + house_number if available, else first part of display_name
+                    let streetAddr = data[0].address?.road || "";
+                    if (data[0].address?.house_number) streetAddr = data[0].address.house_number + " " + streetAddr;
+                    if (!streetAddr) streetAddr = data[0].display_name.split(',')[0];
+
+                    state.venueLocations[name] = { lat, lon, country_code: countryCode, street_address: streetAddr };
+                    console.log(`Geocoded '${addr}': ${lat}, ${lon}, ${countryCode}`);
                 } else {
                     alert("Address not found. Venue created without coordinates.");
                 }
@@ -230,9 +241,14 @@ function setupCreationListeners() {
         if (!venue) return alert("Select a venue first");
 
         // Resolve Center
+        // Resolve Center & Metadata
         let center = { lat: 0, lon: 0 };
+        let meta = { country_code: "", street_address: "" };
+
         if (state.venueLocations[venue]) {
             center = state.venueLocations[venue];
+            meta.country_code = state.venueLocations[venue].country_code || "";
+            meta.street_address = state.venueLocations[venue].street_address || "";
         } else {
             // Default to current map center if no venue location?
             // Or Keep 0,0
@@ -260,7 +276,9 @@ function setupCreationListeners() {
             },
             turns_and_straights: [],
             curbs: [],
-            source_urls: { image: "" } // No image yet
+            source_urls: { image: "" },
+            country_code: meta.country_code,
+            street_address: meta.street_address
         };
 
         state.tracks.push(newTrack);
@@ -334,9 +352,56 @@ async function loadTrack(trackId) {
         if (!state.currentTrack.turns_and_straights) state.currentTrack.turns_and_straights = [];
         if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
 
+        // Ensure objects exist
+        if (!state.currentTrack.start_finish) state.currentTrack.start_finish = { geo_point: null };
+        if (!state.currentTrack.pit) state.currentTrack.pit = {
+            entry: { geo_point: null },
+            exit: { geo_point: null },
+            polyline_geo: []
+        };
+        if (!state.currentTrack.pit.entry) state.currentTrack.pit.entry = { geo_point: null };
+        if (!state.currentTrack.pit.exit) state.currentTrack.pit.exit = { geo_point: null };
+        if (!state.currentTrack.pit.polyline_geo) state.currentTrack.pit.polyline_geo = [];
+
+        // Load Pit Lane Points for rendering/editing
+        // Convert from API {_latitude, _longitude} to L.LatLng
+        state.pitLanePoints = state.currentTrack.pit.polyline_geo.map(p => L.latLng(p._latitude, p._longitude));
+
         // Update the list entry in state.tracks with full data too?
         const idx = state.tracks.findIndex(t => t.id === trackId);
         if (idx !== -1) state.tracks[idx] = apiTrack;
+
+        // Enrich with Address if missing
+        if ((!state.currentTrack.country_code || !state.currentTrack.street_address) && state.currentTrack.center?.geo_point?._latitude) {
+            const lat = state.currentTrack.center.geo_point._latitude;
+            const lon = state.currentTrack.center.geo_point._longitude;
+
+            try {
+                // Avoid redundant calls if 0,0
+                if (Math.abs(lat) > 0.0001 && Math.abs(lon) > 0.0001) {
+                    console.log(`Enriching track ${trackId} with address data...`);
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${lat},${lon}`);
+                    // Search with coordinates often better done via 'reverse' endpoint, but 'search' with q=lat,lon also works or fails.
+                    // Better to use reverse geocoding endpoint for coordinates:
+                    // https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1
+                    const reverseRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`);
+                    const data = await reverseRes.json();
+
+                    if (data && data.address) {
+                        const countryCode = data.address.country_code || "";
+                        let streetAddr = data.address.road || "";
+                        if (data.address.house_number) streetAddr = data.address.house_number + " " + streetAddr;
+                        if (!streetAddr) streetAddr = data.display_name ? data.display_name.split(',')[0] : "";
+
+                        state.currentTrack.country_code = countryCode;
+                        state.currentTrack.street_address = streetAddr;
+                        console.log(`Enriched: ${streetAddr}, ${countryCode}`);
+                    }
+                }
+            } catch (err) {
+                console.warn("Auto-enrichment failed", err);
+            }
+        }
 
     } catch (e) {
         console.error("Load Track Error", e);
@@ -398,7 +463,7 @@ function checkForSiblingEdits(track) {
     const siblings = state.tracks.filter(t => t.venue === track.venue && t.id !== track.id);
     const updatedSiblings = siblings.filter(t => {
         // Simple heuristic for "edited"
-        return (t._sf_point || t._pit_entry || t._pit_exit || (t.curbs && t.curbs.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
+        return (t.start_finish?.geo_point || t.pit?.entry?.geo_point || t.pit?.exit?.geo_point || (t.curbs && t.curbs.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
     });
 
     if (updatedSiblings.length > 0) {
@@ -432,14 +497,18 @@ function setupImportListeners() {
         const target = state.currentTrack;
 
         if (document.getElementById('import-sf').checked) {
-            target._sf_point = sourceTrack._sf_point ? { ...sourceTrack._sf_point } : undefined;
+            target.start_finish = sourceTrack.start_finish ? JSON.parse(JSON.stringify(sourceTrack.start_finish)) : { geo_point: null };
         }
         if (document.getElementById('import-pit').checked) {
-            target._pit_entry = sourceTrack._pit_entry ? { ...sourceTrack._pit_entry } : undefined;
-            target._pit_exit = sourceTrack._pit_exit ? { ...sourceTrack._pit_exit } : undefined;
-            if (sourceTrack._pit_path) {
-                target._pit_path = [...sourceTrack._pit_path];
-                state.pitLanePoints = [...target._pit_path]; // Immediate update
+            // Deep copy pit object
+            if (sourceTrack.pit) {
+                target.pit = JSON.parse(JSON.stringify(sourceTrack.pit));
+                // Update active points
+                if (target.pit.polyline_geo) {
+                    state.pitLanePoints = target.pit.polyline_geo.map(p => L.latLng(p._latitude, p._longitude));
+                } else {
+                    state.pitLanePoints = [];
+                }
             }
         }
         if (document.getElementById('import-geo').checked) {
@@ -468,18 +537,28 @@ function setupImportListeners() {
     });
 }
 
-function loadRefImage(track) {
-    let imgUrl = track.source_urls.image;
-    const refWindow = document.getElementById('ref-window');
-    const img = document.getElementById('ref-img');
+function setupExportListener() {
+    document.getElementById('export-btn').addEventListener('click', () => {
 
-    if (imgUrl) {
-        imgUrl = imgUrl.replace('Results_v2/Results', 'assets/tracks');
-        img.src = imgUrl;
-        refWindow.classList.remove('hidden');
-    } else {
-        refWindow.classList.add('hidden');
-    }
+
+        console.log("export");
+
+
+        if (!state.currentTrack) return;
+
+        const exportData = JSON.parse(JSON.stringify(state.currentTrack));
+
+        // Remove legacy internal fields if they exist
+        delete exportData._pit_path;
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", (state.currentTrack.id || "track") + ".json");
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    });
 }
 
 function loadRefImage(track) {
@@ -892,10 +971,10 @@ function renderFeatures() {
     const metersPerDegreeLon = 111412.84 * Math.cos(centerLat * Math.PI / 180);
     const widthMeters = state.trackWidth / 2;
 
-    if (state.currentTrack._sf_point) {
+    if (state.currentTrack.start_finish?.geo_point) {
         // Find orientation
         const geo = state.currentTrack.track_geometry.polyline_geo;
-        const sfLatLng = state.currentTrack._sf_point;
+        const sfLatLng = state.currentTrack.start_finish.geo_point;
         if (geo) {
             const info = getNearestSegmentIndex(L.latLng(sfLatLng._latitude, sfLatLng._longitude), geo);
             if (info.index !== -1) {
@@ -922,11 +1001,11 @@ function renderFeatures() {
         }
     }
 
-    if (state.currentTrack._pit_entry) {
-        L.circleMarker([state.currentTrack._pit_entry._latitude, state.currentTrack._pit_entry._longitude], { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit In");
+    if (state.currentTrack.pit?.entry?.geo_point) {
+        L.circleMarker([state.currentTrack.pit.entry.geo_point._latitude, state.currentTrack.pit.entry.geo_point._longitude], { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit In");
     }
-    if (state.currentTrack._pit_exit) {
-        L.circleMarker([state.currentTrack._pit_exit._latitude, state.currentTrack._pit_exit._longitude], { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit Out");
+    if (state.currentTrack.pit?.exit?.geo_point) {
+        L.circleMarker([state.currentTrack.pit.exit.geo_point._latitude, state.currentTrack.pit.exit.geo_point._longitude], { color: 'magenta', radius: 5 }).addTo(state.layers.features).bindTooltip("Pit Out");
     }
 
     if (state.currentTrack.curbs) {
@@ -1148,10 +1227,10 @@ function setupMapInteractions() {
 
             let startPoint = null;
             if (state.pitLanePoints.length > 0) startPoint = state.pitLanePoints[state.pitLanePoints.length - 1];
-            else if (state.currentTrack?._pit_entry) startPoint = L.latLng(state.currentTrack._pit_entry._latitude, state.currentTrack._pit_entry._longitude);
+            else if (state.currentTrack?.pit?.entry?.geo_point) startPoint = L.latLng(state.currentTrack.pit.entry.geo_point._latitude, state.currentTrack.pit.entry.geo_point._longitude);
 
             let targetPoint = e.latlng;
-            const pitExit = state.currentTrack?._pit_exit;
+            const pitExit = state.currentTrack?.pit?.exit?.geo_point;
             if (pitExit) {
                 const pitExitLatLng = L.latLng(pitExit._latitude, pitExit._longitude);
                 const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(pitExitLatLng));
@@ -1299,16 +1378,28 @@ function setupMapInteractions() {
         if (state.editingMode === 'TRACE_PIT') {
             let pointToAdd = e.latlng;
             let shouldFinish = false;
-            const pitExit = state.currentTrack?._pit_exit;
+            const pitExit = state.currentTrack?.pit?.exit?.geo_point;
             if (pitExit) {
                 const pitExitLatLng = L.latLng(pitExit._latitude, pitExit._longitude);
                 const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(pitExitLatLng));
                 if (dist < 20) { pointToAdd = pitExitLatLng; shouldFinish = true; }
             }
             state.pitLanePoints.push(pointToAdd);
+
+            // Allow Undo? Yes, it's just local state push
+            // But we should sync to state.currentTrack.pit.polyline_geo ?
+            // Let's do it on completion/click for robustness
+            if (state.currentTrack.pit) {
+                state.currentTrack.pit.polyline_geo.push({ _latitude: pointToAdd.lat, _longitude: pointToAdd.lng });
+            }
+
             renderFeatures();
-            updateUIButtons();
-            if (shouldFinish) { setMode(null); if (state.layers.interaction) state.layers.interaction.clearLayers(); }
+            updateUIButtons(); // Update Trace checkmark
+
+            if (shouldFinish) {
+                setMode(null);
+                if (state.layers.interaction) state.layers.interaction.clearLayers();
+            }
             return;
         }
 
@@ -1319,9 +1410,18 @@ function setupMapInteractions() {
         if (!snapped) return;
 
         let autoExit = false;
-        if (state.editingMode === 'SF_LINE') { state.currentTrack._sf_point = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true; }
-        else if (state.editingMode === 'PIT_ENTRY') { state.currentTrack._pit_entry = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true; }
-        else if (state.editingMode === 'PIT_EXIT') { state.currentTrack._pit_exit = { _latitude: snapped.lat, _longitude: snapped.lng }; autoExit = true; }
+        if (state.editingMode === 'SF_LINE') {
+            state.currentTrack.start_finish.geo_point = { _latitude: snapped.lat, _longitude: snapped.lng };
+            autoExit = true;
+        }
+        else if (state.editingMode === 'PIT_ENTRY') {
+            state.currentTrack.pit.entry.geo_point = { _latitude: snapped.lat, _longitude: snapped.lng };
+            autoExit = true;
+        }
+        else if (state.editingMode === 'PIT_EXIT') {
+            state.currentTrack.pit.exit.geo_point = { _latitude: snapped.lat, _longitude: snapped.lng };
+            autoExit = true;
+        }
         // ADD_CURB handled differently (via handleCurbClick in handlePointClick flow?) 
         // Actually, better to hook into handlePointClick for precision, but if they click map near point, we snap.
         // Let's use the explicit handlePointClick for precision, but if they click map near point, we snap.
@@ -1456,6 +1556,10 @@ function setupEventListeners() {
     document.getElementById('btn-undo-pit').addEventListener('click', () => {
         if (state.pitLanePoints.length > 0) {
             state.pitLanePoints.pop();
+            // Also remove from persistent storage
+            if (state.currentTrack.pit && state.currentTrack.pit.polyline_geo.length > 0) {
+                state.currentTrack.pit.polyline_geo.pop();
+            }
             renderFeatures();
             updateUIButtons();
         }
@@ -1463,7 +1567,14 @@ function setupEventListeners() {
 
     document.getElementById('btn-reset-pit').addEventListener('click', () => {
         if (state.pitLanePoints.length > 0) {
-            if (confirm("Reset pitlane?")) { state.pitLanePoints = []; renderFeatures(); updateUIButtons(); }
+            if (confirm("Reset pitlane?")) {
+                state.pitLanePoints = [];
+                if (state.currentTrack.pit) {
+                    state.currentTrack.pit.polyline_geo = [];
+                }
+                renderFeatures();
+                updateUIButtons();
+            }
         }
     });
 
@@ -1534,16 +1645,7 @@ function setupEventListeners() {
         document.getElementById('ref-window').classList.toggle('maximized');
     });
 
-    document.getElementById('export-btn').addEventListener('click', () => {
-        if (!state.currentTrack) return;
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.tracks, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "updated_tracks.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-    });
+
 }
 
 function setMode(mode, turnIndex = null, curbIndex = null) {
@@ -1561,8 +1663,15 @@ function setMode(mode, turnIndex = null, curbIndex = null) {
 
         // Auto-Start Pit Trace
         if (mode === 'TRACE_PIT') {
-            if (state.pitLanePoints.length === 0 && state.currentTrack && state.currentTrack._pit_entry) {
-                state.pitLanePoints.push(L.latLng(state.currentTrack._pit_entry._latitude, state.currentTrack._pit_entry._longitude));
+            if (state.pitLanePoints.length === 0 && state.currentTrack && state.currentTrack.pit?.entry?.geo_point) {
+                const entry = state.currentTrack.pit.entry.geo_point;
+                state.pitLanePoints.push(L.latLng(entry._latitude, entry._longitude));
+
+                // Also init the persistent array if empty?
+                if (state.currentTrack.pit.polyline_geo.length === 0) {
+                    state.currentTrack.pit.polyline_geo.push({ _latitude: entry._latitude, _longitude: entry._longitude });
+                }
+
                 renderFeatures();
             }
         }
@@ -1593,11 +1702,11 @@ function updateUIButtons() {
     if (state.editingMode === 'TRACE_PIT') document.getElementById('btn-trace-pit').classList.add('active');
     if (state.editingMode === 'EDIT_TRACK') document.getElementById('btn-edit-trace').classList.add('active');
 
-    updateStatusIcon('btn-sf-line', !!state.currentTrack?._sf_point);
-    updateStatusIcon('btn-pit-entry', !!state.currentTrack?._pit_entry);
-    updateStatusIcon('btn-pit-exit', !!state.currentTrack?._pit_exit);
-    updateStatusIcon('btn-trace-pit', state.pitLanePoints.length > 0);
-    // updateStatusIcon('btn-add-curb', state.currentTrack?.curbs?.length > 0); // Removed button
+    updateStatusIcon('btn-sf-line', !!state.currentTrack?.start_finish?.geo_point);
+    updateStatusIcon('btn-pit-entry', !!state.currentTrack?.pit?.entry?.geo_point);
+    updateStatusIcon('btn-pit-exit', !!state.currentTrack?.pit?.exit?.geo_point);
+    updateStatusIcon('btn-trace-pit', state.currentTrack?.pit?.polyline_geo?.length > 0);
+    updateStatusIcon('btn-add-curb', state.currentTrack?.curbs?.length > 0);
 
     // Status for Delete Range (Active mode only)
     const btnDeleteRange = document.getElementById('btn-delete-range');
@@ -1615,7 +1724,7 @@ function updateUIButtons() {
 
     const t = state.currentTrack;
     if (t) {
-        const canTracePit = !!t._pit_entry && !!t._pit_exit;
+        const canTracePit = !!t.pit?.entry?.geo_point && !!t.pit?.exit?.geo_point;
         document.getElementById('btn-trace-pit').disabled = !canTracePit;
         document.getElementById('btn-undo-pit').disabled = state.pitLanePoints.length === 0;
         document.getElementById('btn-reset-pit').disabled = state.pitLanePoints.length === 0;
