@@ -17,13 +17,16 @@
     <div id="sidebar">
         <div class="header">
             <h1>TrackAlign Tool</h1>
+            <div class="header-actions">
+                <button id="btn-settings" class="icon-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
+            </div>
         </div>
 
         <div class="scroll-content">
             <!-- Track Selection -->
             <div class="control-group">
                 <h3>Selection</h3>
-                <label>Venue</label>
+                <label>Track Name</label>
                 <div style="display: flex; gap: 5px; margin-bottom: 10px;">
                     <select id="venue-select" style="flex-grow: 1;">
                         <option>Loading...</option>
@@ -181,6 +184,20 @@
             <div class="modal-actions">
                 <button id="btn-create-track-cancel" class="flat-btn">Cancel</button>
                 <button id="btn-create-track-confirm" class="primary-btn">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Settings</h3>
+            <div class="form-group">
+                <label>API Secret Key</label>
+                <input type="password" id="settings-api-key" placeholder="Enter Secret Key">
+            </div>
+            <div class="modal-actions">
+                <button id="btn-settings-close" class="primary-btn">Close</button>
             </div>
         </div>
     </div>

@@ -5,6 +5,8 @@ const state = {
     venues: {},
     venueLocations: {}, // Map<VenueName, {lat, lon}>
     currentTrack: null,
+    apiKey: localStorage.getItem('trackalign_api_key') || '',
+    apiBase: 'http://127.0.0.1:5001/oversteer-34a98/us-central1',
 
     // UI State
     refWindowCollapsed: false,
@@ -75,42 +77,69 @@ L.control.layers({ "Satellite": satelliteLayer, "Dark Mode": darkLayer }).addTo(
 
 async function init() {
     try {
-        if (typeof TRACK_DATA === 'undefined') {
-            throw new Error("TRACK_DATA not loaded. Check data.js");
+        // Load API Key from Settings
+        const keyInput = document.getElementById('settings-api-key');
+        if (keyInput) keyInput.value = state.apiKey;
+
+        if (!state.apiKey) {
+            alert("No API Key found. Please set it in Settings.");
+            document.getElementById('settings-modal').classList.remove('hidden');
+        } else {
+            await fetchTrackList();
         }
 
-        state.tracks = TRACK_DATA.tracks;
-
-        state.tracks.forEach(t => {
-            const v = t.venue || 'Unknown';
-            if (!state.venues[v]) state.venues[v] = [];
-            state.venues[v].push(t);
-        });
-
-        populateVenueSelect();
         setupEventListeners();
         setupMapInteractions();
         setupKeyboardControls();
         setupImportListeners();
         setupCreationListeners();
-
-        console.log(`Loaded ${state.tracks.length} tracks.`);
+        setupSettingsListeners();
 
     } catch (e) {
-        console.error("Failed to load track data:", e);
-        alert("Failed to load data. Check console.");
+        console.error("Initialization failed:", e);
     }
 }
 
-function populateVenueSelect(selectedVenue = null) {
+async function fetchTrackList() {
+    if (!state.apiKey) return;
+    try {
+        const token = await generateJWT(state.apiKey);
+        const res = await fetch(`${state.apiBase}/api-tracks-list`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error("Failed to fetch tracks");
+
+        const list = (await res.json()).data;
+        console.log("API Track List Sample:", list[0]); // DEBUG
+        // List format: { id, venue, layout_name } ?
+        // Assuming list is array of lightweight track objects
+        state.tracks = list;
+        state.venues = {}; // Reset
+
+        state.tracks.forEach(t => {
+            const group = t.track_name || t.venue || 'Unknown';
+            if (!state.venues[group]) state.venues[group] = [];
+            state.venues[group].push(t);
+        });
+
+        populateVenueSelect();
+        console.log(`Loaded ${state.tracks.length} tracks from API.`);
+
+    } catch (e) {
+        console.error("API Error", e);
+        alert("Failed to fetch track list from API.");
+    }
+}
+
+function populateVenueSelect(selectedGroup = null) {
     const sel = document.getElementById('venue-select');
-    sel.innerHTML = '<option value="">Select Venue...</option>';
+    sel.innerHTML = '<option value="">Select Track Name...</option>';
 
     Object.keys(state.venues).sort().forEach(v => {
         const opt = document.createElement('option');
         opt.value = v;
         opt.textContent = `${v} (${state.venues[v].length})`;
-        if (v === selectedVenue) opt.selected = true;
+        if (v === selectedGroup) opt.selected = true;
         sel.appendChild(opt);
     });
 
@@ -126,9 +155,9 @@ function updateTrackSelect(venue, selectedTrackId = null) {
     if (venue && state.venues[venue]) {
         state.venues[venue].forEach((t) => {
             const opt = document.createElement('option');
-            opt.value = t.track_id;
-            opt.textContent = t.layout_name || t.track_id;
-            if (t.track_id === selectedTrackId) opt.selected = true;
+            opt.value = t.id;
+            opt.textContent = t.layout_name || t.id;
+            if (t.id === selectedTrackId) opt.selected = true;
             sel.appendChild(opt);
         });
     }
@@ -213,8 +242,9 @@ function setupCreationListeners() {
 
         // Create Track Object
         const newTrack = {
-            track_id: Date.now().toString(), // Simple ID
+            id: Date.now().toString(), // Simple ID
             venue: venue,
+            track_name: venue, // Use the selected group as track_name
             layout_name: name,
             center: center,
             geometry: {
@@ -234,19 +264,82 @@ function setupCreationListeners() {
         state.venues[venue].push(newTrack);
 
         trackModal.classList.add('hidden');
-        updateTrackSelect(venue, newTrack.track_id);
-        loadTrack(newTrack.track_id);
+        updateTrackSelect(venue, newTrack.id);
+        loadTrack(newTrack.id);
+    });
+}
+
+function setupSettingsListeners() {
+    const modal = document.getElementById('settings-modal');
+    const input = document.getElementById('settings-api-key');
+
+    document.getElementById('btn-settings').addEventListener('click', () => {
+        input.value = state.apiKey || '';
+        modal.classList.remove('hidden');
+    });
+
+    document.getElementById('btn-settings-close').addEventListener('click', async () => {
+        const newKey = input.value.trim();
+        if (newKey !== state.apiKey) {
+            state.apiKey = newKey;
+            localStorage.setItem('trackalign_api_key', newKey);
+            if (newKey) {
+                alert("API Key saved. Fetching tracks...");
+                await fetchTrackList();
+            }
+        }
+        modal.classList.add('hidden');
     });
 }
 
 
 // --- Logic ---
 
-function loadTrack(trackId) {
-    const track = state.tracks.find(t => t.track_id === trackId);
-    if (!track) return;
+async function loadTrack(trackId) {
+    console.log("Trying to load track: " + trackId);
+    // 1. Fetch Full Details
+    try {
+        const token = await generateJWT(state.apiKey);
+        const res = await fetch(`${state.apiBase}/api-tracks-get`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ids: [trackId] })
+        });
+        if (!res.ok) throw new Error("Failed to load track details");
 
-    state.currentTrack = track;
+        const responseData = await res.json();
+        // Expected response structure might be { data: [track] } or just [track]
+        // Previous fix for list used .data, let's assume consistent wrapper or check.
+        // If the user didn't specify return format change, I will handle both or just data.
+        // Usually API wrappers are consistent.
+        // Previous user edit step 7653: `const list = (await res.json()).data;` for list.
+        // So likely `responseData.data` is the array.
+
+        const data = responseData.data || responseData;
+
+        const fullTrack = Array.isArray(data) ? data[0] : data;
+
+        if (!fullTrack) throw new Error("Track not found in API response");
+
+        // Merge into state or replace?
+        // Replace currentTrack
+        state.currentTrack = fullTrack;
+
+        // Update the list entry in state.tracks with full data too?
+        const idx = state.tracks.findIndex(t => t.id === trackId);
+        if (idx !== -1) state.tracks[idx] = fullTrack;
+
+    } catch (e) {
+        console.error("Load Track Error", e);
+        alert("Failed to load track details.");
+        return;
+    }
+
+    const track = state.currentTrack;
+
     // ensure curbs array exists
     if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
 
@@ -255,8 +348,11 @@ function loadTrack(trackId) {
     state.selectedTrackPointIndex = null;
 
     // History Init
-    if (state.currentTrack.geometry.main.polyline_geo) {
+    if (state.currentTrack.geometry && state.currentTrack.geometry.main && state.currentTrack.geometry.main.polyline_geo) {
         state.originalTrackGeo = JSON.parse(JSON.stringify(state.currentTrack.geometry.main.polyline_geo));
+    } else {
+        // Handle empty geometry
+        if (!state.currentTrack.geometry) state.currentTrack.geometry = { main: { polyline_geo: [] } };
     }
     state.trackHistory = [];
 
@@ -283,15 +379,15 @@ function loadTrack(trackId) {
     renderTrackWidth();
 
     updateFeatureList();
+    updateCurbList();
 
     // 5. Check for Imports
     checkForSiblingEdits(track);
 }
-
 function checkForSiblingEdits(track) {
     if (!track.venue) return;
 
-    const siblings = state.tracks.filter(t => t.venue === track.venue && t.track_id !== track.track_id);
+    const siblings = state.tracks.filter(t => t.venue === track.venue && t.id !== track.id);
     const updatedSiblings = siblings.filter(t => {
         // Simple heuristic for "edited"
         return (t._sf_point || t._pit_entry || t._pit_exit || (t.curbs && t.curbs.length > 0) || (t.turns && t.turns.some(turn => turn.geo_point)));
@@ -304,8 +400,8 @@ function checkForSiblingEdits(track) {
 
         updatedSiblings.forEach(s => {
             const opt = document.createElement('option');
-            opt.value = s.track_id;
-            opt.textContent = s.layout_name || s.track_id;
+            opt.value = s.id;
+            opt.textContent = s.layout_name || s.id;
             select.appendChild(opt);
         });
 
@@ -321,7 +417,7 @@ function setupImportListeners() {
     document.getElementById('btn-import-confirm').addEventListener('click', () => {
         const select = document.getElementById('import-source-select');
         const sourceId = select.value;
-        const sourceTrack = state.tracks.find(t => t.track_id === sourceId);
+        const sourceTrack = state.tracks.find(t => t.id === sourceId);
 
         if (!sourceTrack) return;
 
@@ -1153,8 +1249,7 @@ function setupMapInteractions() {
         else if (state.editingMode === 'PIT_ENTRY') { state.currentTrack._pit_entry = snapped; autoExit = true; }
         else if (state.editingMode === 'PIT_EXIT') { state.currentTrack._pit_exit = snapped; autoExit = true; }
         // ADD_CURB handled differently (via handleCurbClick in handlePointClick flow?) 
-        // Actually, better to hook into handlePointClick for Curb logic too if it clicks a point.
-        // But map click might be near a point.
+        // Actually, better to hook into handlePointClick for precision, but if they click map near point, we snap.
         // Let's use the explicit handlePointClick for precision, but if they click map near point, we snap.
 
         if (state.editingMode === 'DEFINE_CURB_START' || state.editingMode === 'DEFINE_CURB_END') {
@@ -1222,7 +1317,34 @@ function setupKeyboardControls() {
 
 function setupEventListeners() {
     document.getElementById('venue-select').addEventListener('change', (e) => updateTrackSelect(e.target.value));
-    document.getElementById('track-select').addEventListener('change', (e) => loadTrack(e.target.value));
+    document.getElementById('track-select').addEventListener('change', (e) => {
+        const val = e.target.value;
+        const venue = document.getElementById('venue-select').value;
+        let trackId = val;
+
+        console.log(e);
+
+        console.log("selected value: " + val);
+
+        console.log("venue: " + venue);
+
+        // User warning: val might be layout name. Ensure we get the ID.
+        if (venue && state.venues[venue]) {
+            // Try to find exact match on ID
+            const tById = state.venues[venue].find(t => t.id === val);
+            if (tById) {
+                trackId = tById.id;
+            } else {
+                // Try to match by layout_name
+                const tByName = state.venues[venue].find(t => t.layout_name === val);
+                if (tByName) {
+                    trackId = tByName.id;
+                }
+            }
+        }
+
+        if (trackId) loadTrack(trackId);
+    });
 
     document.getElementById('btn-sf-line').addEventListener('click', () => setMode('SF_LINE'));
     document.getElementById('btn-pit-entry').addEventListener('click', () => setMode('PIT_ENTRY'));
@@ -1587,4 +1709,51 @@ function updateCurbList() {
         div.appendChild(btnDel);
         list.appendChild(div);
     });
+}
+
+// --- API / JWT Utils ---
+
+function base64UrlEncode(data) {
+    let str = "";
+    if (typeof data === "string") {
+        str = btoa(data);
+    } else {
+        str = btoa(String.fromCharCode(...data));
+    }
+    return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function generateJWT(secret) {
+    if (!secret) return null;
+    const encoder = new TextEncoder();
+    const header = { alg: "HS256", typ: "JWT" };
+    const payload = {
+        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+        scope: "api_access"
+    };
+
+    const encodedHeader = base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+
+    try {
+        const key = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+        );
+
+        const signature = await crypto.subtle.sign(
+            "HMAC",
+            key,
+            encoder.encode(`${encodedHeader}.${encodedPayload}`)
+        );
+
+        const encodedSignature = base64UrlEncode(new Uint8Array(signature));
+        return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
+    } catch (e) {
+        console.error("JWT Generation Error", e);
+        return null;
+    }
 }
