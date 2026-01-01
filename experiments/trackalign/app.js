@@ -92,6 +92,7 @@ async function init() {
         setupMapInteractions();
         setupKeyboardControls();
         setupCreationListeners();
+        setupImportListeners();
         setupSettingsListeners();
         setupExportListener();
         setupSaveListener();
@@ -130,6 +131,7 @@ async function fetchTrackList() {
 
         state.tracks.forEach(t => {
             const group = t.track_name || t.venue || 'Unknown';
+            t.venue = group; // Ensure venue property exists for logic
             if (!state.venues[group]) state.venues[group] = [];
             state.venues[group].push(t);
         });
@@ -337,7 +339,21 @@ async function loadTrack(trackId) {
     if (select) select.disabled = true;
 
     // 1. Fetch Full Details
+    // 1. Fetch Full Details
     try {
+        // Find venue to get all sibling IDs
+        let idsToFetch = [trackId];
+        let venueName = null;
+
+        // Find which venue group this track belongs to
+        for (const [vName, tracks] of Object.entries(state.venues)) {
+            if (tracks.find(t => t.id === trackId)) {
+                venueName = vName;
+                idsToFetch = tracks.map(t => t.id);
+                break;
+            }
+        }
+
         const token = await generateJWT(state.apiKey);
         const res = await fetch(`${state.apiBase}/api-tracks-get`, {
             method: 'POST',
@@ -345,23 +361,30 @@ async function loadTrack(trackId) {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ ids: [trackId] })
+            body: JSON.stringify({ ids: idsToFetch })
         });
         if (!res.ok) throw new Error("Failed to load track details");
 
         const responseData = await res.json();
-        // Expected response structure might be { data: [track] } or just [track]
-        // Previous fix for list used .data, let's assume consistent wrapper or check.
-        // If the user didn't specify return format change, I will handle both or just data.
-        // Usually API wrappers are consistent.
-        // Previous user edit step 7653: `const list = (await res.json()).data;` for list.
-        // So likely `responseData.data` is the array.
-
         const data = responseData.data || responseData;
+        const tracksData = Array.isArray(data) ? data : [data];
 
-        const apiTrack = Array.isArray(data) ? data[0] : data;
+        if (!tracksData || tracksData.length === 0) throw new Error("Track not found in API response");
 
-        if (!apiTrack) throw new Error("Track not found in API response");
+        // Update state.tracks with full details for ALL fetched tracks
+        tracksData.forEach(fullTrack => {
+            if (venueName) fullTrack.venue = venueName; // Preserve venue association
+            const idx = state.tracks.findIndex(t => t.id === fullTrack.id);
+            if (idx !== -1) {
+                state.tracks[idx] = fullTrack;
+            } else {
+                // Should not happen if list is in sync, but maybe pushes
+                state.tracks.push(fullTrack);
+            }
+        });
+
+        const apiTrack = tracksData.find(t => t.id === trackId);
+        if (!apiTrack) throw new Error("Requested track ID not found in response");
 
         // Use API format directly
         state.currentTrack = apiTrack;
@@ -394,8 +417,9 @@ async function loadTrack(trackId) {
         state.pitLanePoints = state.currentTrack.pit.polyline_geo.map(p => L.latLng(p._latitude, p._longitude));
 
         // Update the list entry in state.tracks with full data too?
-        const idx = state.tracks.findIndex(t => t.id === trackId);
-        if (idx !== -1) state.tracks[idx] = apiTrack;
+        // Already done above for all siblings.
+        // const idx = state.tracks.findIndex(t => t.id === trackId);
+        // if (idx !== -1) state.tracks[idx] = apiTrack;
 
         // Enrich with Address if missing
         if ((!state.currentTrack.country_code || !state.currentTrack.street_address) && state.currentTrack.center?.geo_point?._latitude) {
@@ -491,8 +515,9 @@ function checkForSiblingEdits(track) {
 
     const siblings = state.tracks.filter(t => t.venue === track.venue && t.id !== track.id);
     const updatedSiblings = siblings.filter(t => {
-        // Simple heuristic for "edited"
-        return (t.start_finish?.geo_point || t.pit?.entry?.geo_point || t.pit?.exit?.geo_point || (t.curbs && t.curbs.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
+        // Check for specific flag or heuristic
+        return t.has_been_updated === true ||
+            (t.start_finish?.geo_point || t.pit?.entry?.geo_point || t.pit?.exit?.geo_point || (t.curbs && t.curbs.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
     });
 
     if (updatedSiblings.length > 0) {
@@ -517,11 +542,17 @@ function setupImportListeners() {
     });
 
     document.getElementById('btn-import-confirm').addEventListener('click', () => {
+
+        console.log("import");
+
         const select = document.getElementById('import-source-select');
         const sourceId = select.value;
-        const sourceTrack = state.tracks.find(t => t.id === sourceId);
+        const sourceTrack = state.tracks.find(t => String(t.id) === String(sourceId));
 
-        if (!sourceTrack) return;
+        if (!sourceTrack) {
+            console.error("Import failed: Source track not found for ID", sourceId);
+            return;
+        }
 
         const target = state.currentTrack;
 
@@ -607,6 +638,7 @@ function setupSaveListener() {
             delete track._sf_point;
             delete track._pit_entry;
             delete track._pit_exit;
+            delete track.venue;
 
             // Check if new or existing
             const isNew = !!track.isNew;
