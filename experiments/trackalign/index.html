@@ -31,9 +31,10 @@
                 </label>
                 <label>Track Name</label>
                 <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                    <select id="venue-select" style="flex-grow: 1;">
-                        <option>Loading...</option>
-                    </select>
+                    <div style="position: relative; flex-grow: 1;">
+                        <input type="text" id="venue-search" placeholder="Search Venue..." autocomplete="off">
+                        <div id="venue-results" class="results-dropdown hidden"></div>
+                    </div>
                     <button id="btn-create-venue" class="icon-btn" style="width: 30px;" title="New Venue"><i
                             class="fa-solid fa-plus"></i></button>
                 </div>
@@ -106,6 +107,11 @@
             <!-- Features List (Turns) -->
             <div class="control-group" id="features-panel">
                 <h3>Turns & Straights</h3>
+                <div class="feature-header">
+                    <span>Items</span>
+                    <button id="btn-add-turn" class="icon-btn" title="Add Turn"><i
+                            class="fa-solid fa-plus"></i></button>
+                </div>
                 <div id="feature-list">
                     <!-- Dynamic content will be buttons -->
                     <div class="feature-item" style="color: #666; font-style: italic;">No track selected</div>
@@ -217,6 +223,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"

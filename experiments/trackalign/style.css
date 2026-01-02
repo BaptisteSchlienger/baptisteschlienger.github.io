@@ -28,6 +28,9 @@ body {
     padding: 15px;
     background: #333;
     border-bottom: 1px solid #444;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .header h1 {
@@ -448,4 +451,69 @@ button {
     width: 100%;
     height: auto;
     display: block;
+}
+
+/* Toast Notification */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #444;
+    /* Slightly lighter than bg */
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    font-size: 14px;
+    border: 1px solid #666;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    pointer-events: none;
+}
+
+.toast.show {
+    opacity: 1;
+}
+
+.toast.hidden {
+    display: none;
+}
+
+/* Typeahead Results */
+.results-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #252525;
+    border: 1px solid #444;
+    border-top: none;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.results-dropdown.hidden {
+    display: none;
+}
+
+.result-item {
+    padding: 8px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #333;
+    color: #eee;
+    font-size: 0.9rem;
+}
+
+.result-item:last-child {
+    border-bottom: none;
+}
+
+.result-item:hover {
+    background: #333;
+    color: #fff;
 }

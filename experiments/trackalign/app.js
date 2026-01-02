@@ -46,6 +46,26 @@ const state = {
     }
 };
 
+// Toast Helper
+function showToast(message, duration = 3000) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    // slight delay to allow display:block to apply before opacity transition
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.classList.add('hidden');
+        }, 300); // match transition duration
+    }, duration);
+}
+
 const map = L.map('map', {
     center: [0, 0],
     zoom: 2,
@@ -102,6 +122,7 @@ async function init() {
             fetchTrackList(); // Refresh list on toggle
         });
 
+        updateUIButtons(); // Initial State
 
     } catch (e) {
         console.error("Initialization failed:", e);
@@ -136,7 +157,8 @@ async function fetchTrackList() {
             state.venues[group].push(t);
         });
 
-        populateVenueSelect();
+        // Initialize Search (Clear it)
+        setupVenueSearch();
         console.log(`Loaded ${state.tracks.length} tracks from API.`);
 
     } catch (e) {
@@ -145,19 +167,15 @@ async function fetchTrackList() {
     }
 }
 
-function populateVenueSelect(selectedGroup = null) {
-    const sel = document.getElementById('venue-select');
-    sel.innerHTML = '<option value="">Select Track Name...</option>';
-
-    Object.keys(state.venues).sort().forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v;
-        opt.textContent = `${v} (${state.venues[v].length})`;
-        if (v === selectedGroup) opt.selected = true;
-        sel.appendChild(opt);
-    });
-
-    // Enable Create Venue button? Always enabled.
+function setupVenueSearch(selectedGroup = null) {
+    const input = document.getElementById('venue-search');
+    if (selectedGroup) {
+        input.value = selectedGroup;
+        updateTrackSelect(selectedGroup);
+    } else {
+        input.value = '';
+        updateTrackSelect(null);
+    }
 }
 
 function updateTrackSelect(venue, selectedTrackId = null) {
@@ -227,7 +245,8 @@ function setupCreationListeners() {
         }
 
         venueModal.classList.add('hidden');
-        populateVenueSelect(name); // Select it
+        venueModal.classList.add('hidden');
+        setupVenueSearch(name); // Select it
         updateTrackSelect(name); // Refresh track list (empty)
 
         // Trigger change to update global state?
@@ -467,7 +486,8 @@ async function loadTrack(trackId) {
     // ensure curbs array exists
     if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
 
-    state.pitLanePoints = state.currentTrack._pit_path ? [...state.currentTrack._pit_path] : [];
+    // state.pitLanePoints already loaded above from API structure
+    // state.pitLanePoints = state.currentTrack._pit_path ? [...state.currentTrack._pit_path] : [];
     state.editingMode = null;
     state.selectedTrackPointIndex = null;
 
@@ -625,10 +645,10 @@ function setupSaveListener() {
     document.getElementById('save-btn').addEventListener('click', async () => {
         if (!state.currentTrack) return;
 
-        const saveBtn = document.getElementById('save-btn');
-        const originalText = saveBtn.textContent;
-        saveBtn.textContent = "Saving...";
-        saveBtn.disabled = true;
+        const btn = document.getElementById('save-btn');
+        const originalText = btn.textContent;
+        btn.textContent = "Saving...";
+        btn.disabled = true;
 
         try {
             const track = JSON.parse(JSON.stringify(state.currentTrack));
@@ -661,36 +681,24 @@ function setupSaveListener() {
                 body: JSON.stringify(track)
             });
 
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`Save failed: ${res.status} ${errText}`);
+            if (res.ok) {
+                const updatedTrack = (await res.json()).data || track; // Use returned data if available
+                state.currentTrack.has_been_updated = true;
+
+                // If it was new, we might need to update ID or refresh list? 
+                // Currently API returns the object. Ideally we update state.tracks[idx] with response.
+                // But for now, just success.
+                showToast("Track saved successfully!");
+            } else {
+                throw new Error("API responded with " + res.status);
             }
-
-            const responseData = await res.json();
-            console.log("Save success:", responseData);
-
-            // If new, update local state
-            if (isNew) {
-                state.currentTrack.isNew = false;
-                // If API returns a new ID, update it? 
-                // Usually APIs return the created object or ID.
-                // Assuming responseData.id or similar.
-                // For now, keep local ID unless we know API behavior.
-                // If API returns { id: "..." }, update logic here.
-                if (responseData.id) {
-                    // Update ID in state.tracks and venues ? 
-                    // Complex due to references. prefer reload or simple update if easy.
-                }
-            }
-
-            alert("Track saved successfully!");
 
         } catch (e) {
-            console.error("Save Error", e);
-            alert("Error saving track: " + e.message);
+            console.error("Save Error:", e);
+            alert("Failed to save track: " + e.message);
         } finally {
-            saveBtn.textContent = originalText;
-            saveBtn.disabled = false;
+            btn.textContent = originalText;
+            btn.disabled = false;
         }
     });
 }
@@ -1638,10 +1646,46 @@ function setupKeyboardControls() {
 // --- UI & Events ---
 
 function setupEventListeners() {
-    document.getElementById('venue-select').addEventListener('change', (e) => updateTrackSelect(e.target.value));
+    // Venue Search Typeahead
+    const vInput = document.getElementById('venue-search');
+    const vResults = document.getElementById('venue-results');
+
+    const updateResults = () => {
+        const val = vInput.value.toLowerCase();
+        vResults.innerHTML = '';
+        const matches = Object.keys(state.venues).filter(v => v.toLowerCase().includes(val)).sort();
+
+        if (matches.length > 0) {
+            matches.forEach(v => { // Show all matches
+                const div = document.createElement('div');
+                div.className = 'result-item';
+                div.textContent = `${v} (${state.venues[v].length})`;
+                div.onclick = () => {
+                    vInput.value = v;
+                    vResults.classList.add('hidden');
+                    updateTrackSelect(v);
+                };
+                vResults.appendChild(div);
+            });
+            vResults.classList.remove('hidden');
+        } else {
+            vResults.classList.add('hidden');
+        }
+    };
+
+    vInput.addEventListener('input', updateResults);
+    vInput.addEventListener('focus', updateResults);
+
+    // Blur with delay to allow click
+    vInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            vResults.classList.add('hidden');
+        }, 200);
+    });
+
     document.getElementById('track-select').addEventListener('change', (e) => {
         const val = e.target.value;
-        const venue = document.getElementById('venue-select').value;
+        const venue = document.getElementById('venue-search').value;
         let trackId = val;
 
         console.log(e);
@@ -1684,6 +1728,25 @@ function setupEventListeners() {
         // Auto-Start defining the new curb
         const newIndex = state.currentTrack.curbs.length - 1;
         setMode('DEFINE_CURB_START', null, newIndex);
+    });
+
+    document.getElementById('btn-add-turn').addEventListener('click', () => {
+        if (!state.currentTrack) return;
+        if (!state.currentTrack.turns_and_straights) state.currentTrack.turns_and_straights = [];
+
+        const newNum = state.currentTrack.turns_and_straights.length + 1;
+        const newTurn = {
+            name: `Turn ${newNum}`,
+            geo_point: null
+        };
+        state.currentTrack.turns_and_straights.push(newTurn);
+        updateFeatureList();
+
+        // Auto-activate placement
+        const idx = state.currentTrack.turns_and_straights.length - 1;
+        setMode('TURN_POINT', idx);
+        renderFeatures();
+        updateUIButtons();
     });
 
     // Pit Lane Controls
@@ -1858,10 +1921,25 @@ function updateUIButtons() {
 
     const t = state.currentTrack;
     if (t) {
+        // RE-ENABLE EVERYTHING
+        const allBtns = document.querySelectorAll('.control-group button');
+        allBtns.forEach(b => b.disabled = false);
+
+        const allInputs = document.querySelectorAll('.control-group input');
+        allInputs.forEach(i => i.disabled = false);
+
+        document.querySelectorAll('.control-group').forEach(g => {
+            g.style.opacity = '1';
+        });
+
         const canTracePit = !!t.pit?.entry?.geo_point && !!t.pit?.exit?.geo_point;
         document.getElementById('btn-trace-pit').disabled = !canTracePit;
         document.getElementById('btn-undo-pit').disabled = state.pitLanePoints.length === 0;
+        document.getElementById('btn-undo-pit').disabled = state.pitLanePoints.length === 0;
         document.getElementById('btn-reset-pit').disabled = state.pitLanePoints.length === 0;
+
+        document.getElementById('save-btn').disabled = false;
+        document.getElementById('export-btn').disabled = false;
 
         document.getElementById('btn-trace-pit').title = !canTracePit ? "Set Pit Entry and Exit first" : "Draw pitlane path";
 
@@ -1892,18 +1970,36 @@ function updateUIButtons() {
     } else {
         // Disable EVERYTHING in the sidebar tools if no track is selected
         const allBtns = document.querySelectorAll('.control-group button');
-        allBtns.forEach(b => b.disabled = true);
+        allBtns.forEach(b => {
+            // Exclude creation buttons or specific actions if needed
+            if (b.id !== 'btn-create-venue' && b.id !== 'btn-create-track') {
+                b.disabled = true;
+            }
+        });
 
         const radios = document.getElementsByName('direction');
         radios.forEach(r => r.disabled = true);
 
         const allInputs = document.querySelectorAll('.control-group input');
-        allInputs.forEach(i => i.disabled = true);
+        allInputs.forEach(i => {
+            // Exclude filter checkbox and venue search
+            if (i.id !== 'filter-non-modified' && i.id !== 'venue-search') {
+                i.disabled = true;
+            }
+        });
+
+        document.getElementById('save-btn').disabled = true;
+        document.getElementById('export-btn').disabled = true;
+
+        // Clear Lists
+        document.getElementById('feature-list').innerHTML = '<div class="feature-item" style="color: #666; font-style: italic;">No track selected</div>';
+        document.getElementById('curb-list').innerHTML = '<div style="color: #666; font-style: italic; padding: 10px;">No track selected</div>';
+
 
         // Opacity for visual feedback
         document.querySelectorAll('.control-group').forEach(g => {
             // Don't fade the selection group
-            if (!g.querySelector('#venue-select')) {
+            if (!g.querySelector('#venue-search')) {
                 g.style.opacity = '0.5';
             }
         });
