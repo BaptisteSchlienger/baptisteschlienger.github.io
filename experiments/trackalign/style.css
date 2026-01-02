@@ -56,11 +56,50 @@ body {
 
 .control-group h3 {
     margin-top: 0;
-    margin-bottom: 10px;
+    margin-bottom: 0;
     font-size: 0.9rem;
     text-transform: uppercase;
     color: #888;
     letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.toggle-section-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: #888;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: transform 0.3s;
+}
+
+.toggle-section-btn:hover {
+    color: #fff;
+    background: transparent;
+}
+
+.group-content {
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+    max-height: 1000px;
+    /* Arbitrary large height */
+    opacity: 1;
+    /* overflow: hidden; */
+    margin-top: 10px;
+}
+
+.group-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.toggle-section-btn.rotated {
+    transform: rotate(-90deg);
 }
 
 label {

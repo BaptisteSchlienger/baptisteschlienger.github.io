@@ -13,7 +13,9 @@ const state = {
     editingMode: null, // 'SF_LINE', 'PIT_ENTRY', 'PIT_EXIT', 'TRACE_PIT', 'TURN_POINT', 'ADD_CURB', 'EDIT_TRACK'
     activeTurnIndex: null, // If editing a turn
     activeCurbIndex: null, // If editing a curb
+    activeSectorIndex: null, // If editing a sector
     highlightedCurbIndex: null, // Hover state
+    highlightedSectorIndex: null, // Hover state
     pitLanePoints: [], // For TRACE_PIT
 
     // Geometry State
@@ -145,9 +147,13 @@ async function fetchTrackList() {
 
         const list = (await res.json()).data;
         console.log("API Track List Sample:", list[0]); // DEBUG
-        // List format: { id, venue, layout_name } ?
-        // Assuming list is array of lightweight track objects
-        state.tracks = list;
+        // List format: { id, venue, layout_name }
+        // Map API 'id' to internal 'track_id' if needed
+        state.tracks = list.map(t => {
+            if (t.id && !t.track_id) t.track_id = t.id;
+            // Ensure consistency if API uses 'id'
+            return t;
+        });
         state.venues = {}; // Reset
 
         state.tracks.forEach(t => {
@@ -187,9 +193,9 @@ function updateTrackSelect(venue, selectedTrackId = null) {
     if (venue && state.venues[venue]) {
         state.venues[venue].forEach((t) => {
             const opt = document.createElement('option');
-            opt.value = t.id;
-            opt.textContent = t.layout_name || t.id;
-            if (t.id === selectedTrackId) opt.selected = true;
+            opt.value = t.track_id;
+            opt.textContent = t.layout_name || t.track_id;
+            if (t.track_id === selectedTrackId) opt.selected = true;
             sel.appendChild(opt);
         });
     }
@@ -268,7 +274,7 @@ function setupCreationListeners() {
         const name = document.getElementById('new-track-name').value.trim();
         if (!name) return alert("Track Name required");
 
-        const venue = document.getElementById('venue-select').value;
+        const venue = document.getElementById('venue-search').value;
         if (!venue) return alert("Select a venue first");
 
         // Resolve Center
@@ -287,9 +293,14 @@ function setupCreationListeners() {
             center = { lat: c.lat, lon: c.lng };
         }
 
+        // Generate specific ID schema: Track_Name__Track_Layout_Name
+        // Sanitize: No special chars, underscores instead of spaces
+        const sanitize = (str) => str.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+        const trackId = `${sanitize(venue)}__${sanitize(name)}`;
+
         // Create Track Object
         const newTrack = {
-            id: Date.now().toString(), // Simple ID
+            track_id: trackId, // Updated Schema
             venue: venue,
             track_name: venue, // Use the selected group as track_name
             layout_name: name,
@@ -317,8 +328,8 @@ function setupCreationListeners() {
         state.venues[venue].push(newTrack);
 
         trackModal.classList.add('hidden');
-        updateTrackSelect(venue, newTrack.id);
-        loadTrack(newTrack.id);
+        updateTrackSelect(venue, newTrack.track_id);
+        loadTrack(newTrack.track_id);
     });
 }
 
@@ -366,51 +377,61 @@ async function loadTrack(trackId) {
 
         // Find which venue group this track belongs to
         for (const [vName, tracks] of Object.entries(state.venues)) {
-            if (tracks.find(t => t.id === trackId)) {
+            if (tracks.find(t => t.track_id === trackId)) {
                 venueName = vName;
-                idsToFetch = tracks.map(t => t.id);
+                idsToFetch = tracks.map(t => t.track_id);
                 break;
             }
         }
 
-        const token = await generateJWT(state.apiKey);
-        const res = await fetch(`${state.apiBase}/api-tracks-get`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ ids: idsToFetch })
-        });
-        if (!res.ok) throw new Error("Failed to load track details");
+        // 1b. Check if track is NEW (local only)
+        const currentLocal = state.tracks.find(t => t.track_id === trackId);
+        if (currentLocal && currentLocal.isNew) {
+            console.log("Track is new, skipping API fetch.");
+            state.currentTrack = currentLocal;
+        } else {
+            const token = await generateJWT(state.apiKey);
+            const res = await fetch(`${state.apiBase}/api-tracks-get`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ids: idsToFetch })
+            });
+            if (!res.ok) throw new Error("Failed to load track details");
 
-        const responseData = await res.json();
-        const data = responseData.data || responseData;
-        const tracksData = Array.isArray(data) ? data : [data];
+            const responseData = await res.json();
+            const data = responseData.data || responseData;
+            const tracksData = Array.isArray(data) ? data : [data];
 
-        if (!tracksData || tracksData.length === 0) throw new Error("Track not found in API response");
+            if (!tracksData || tracksData.length === 0) throw new Error("Track not found in API response");
 
-        // Update state.tracks with full details for ALL fetched tracks
-        tracksData.forEach(fullTrack => {
-            if (venueName) fullTrack.venue = venueName; // Preserve venue association
-            const idx = state.tracks.findIndex(t => t.id === fullTrack.id);
-            if (idx !== -1) {
-                state.tracks[idx] = fullTrack;
-            } else {
-                // Should not happen if list is in sync, but maybe pushes
-                state.tracks.push(fullTrack);
-            }
-        });
+            // Update state.tracks with full details for ALL fetched tracks
+            tracksData.forEach(fullTrack => {
+                if (fullTrack.id && !fullTrack.track_id) fullTrack.track_id = fullTrack.id; // Map ID
 
-        const apiTrack = tracksData.find(t => t.id === trackId);
-        if (!apiTrack) throw new Error("Requested track ID not found in response");
+                if (venueName) fullTrack.venue = venueName; // Preserve venue association
+                const idx = state.tracks.findIndex(t => t.track_id === fullTrack.track_id);
+                if (idx !== -1) {
+                    state.tracks[idx] = fullTrack;
+                } else {
+                    // Should not happen if list is in sync, but maybe pushes
+                    state.tracks.push(fullTrack);
+                }
+            });
 
-        // Use API format directly
-        state.currentTrack = apiTrack;
+            const apiTrack = tracksData.find(t => t.track_id === trackId);
+            if (!apiTrack) throw new Error("Requested track ID not found in response");
+
+            // Use API format directly
+            state.currentTrack = apiTrack;
+        }
 
         // Ensure arrays exist
         if (!state.currentTrack.turns_and_straights) state.currentTrack.turns_and_straights = [];
         if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
+        if (!state.currentTrack.sectors) state.currentTrack.sectors = [];
 
         // Ensure objects exist
         if (!state.currentTrack.start_finish) state.currentTrack.start_finish = { geo_point: null };
@@ -525,7 +546,9 @@ async function loadTrack(trackId) {
     renderTrackWidth();
 
     updateFeatureList();
+    updateFeatureList();
     updateCurbList();
+    updateSectorList();
 
 
     // 5. Check for Imports
@@ -551,14 +574,15 @@ async function loadTrack(trackId) {
         lonInput.value = '';
     }
 }
+
 function checkForSiblingEdits(track) {
     if (!track.venue) return;
 
-    const siblings = state.tracks.filter(t => t.venue === track.venue && t.id !== track.id);
+    const siblings = state.tracks.filter(t => t.venue === track.venue && t.track_id !== track.track_id);
     const updatedSiblings = siblings.filter(t => {
         // Check for specific flag or heuristic
         return t.has_been_updated === true ||
-            (t.start_finish?.geo_point || t.pit?.entry?.geo_point || t.pit?.exit?.geo_point || (t.curbs && t.curbs.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
+            (t.start_finish?.geo_point || t.pit?.entry?.geo_point || t.pit?.exit?.geo_point || (t.curbs && t.curbs.length > 0) || (t.sectors && t.sectors.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
     });
 
     if (updatedSiblings.length > 0) {
@@ -568,8 +592,8 @@ function checkForSiblingEdits(track) {
 
         updatedSiblings.forEach(s => {
             const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.layout_name || s.id;
+            opt.value = s.track_id;
+            opt.textContent = s.layout_name || s.track_id;
             select.appendChild(opt);
         });
 
@@ -588,7 +612,7 @@ function setupImportListeners() {
 
         const select = document.getElementById('import-source-select');
         const sourceId = select.value;
-        const sourceTrack = state.tracks.find(t => String(t.id) === String(sourceId));
+        const sourceTrack = state.tracks.find(t => String(t.track_id) === String(sourceId));
 
         if (!sourceTrack) {
             console.error("Import failed: Source track not found for ID", sourceId);
@@ -628,11 +652,18 @@ function setupImportListeners() {
                 target.curbs = JSON.parse(JSON.stringify(sourceTrack.curbs));
             }
         }
+        if (document.getElementById('import-sectors')?.checked) { // Assuming UI checkbox exists or we autolink it?
+            if (sourceTrack.sectors) {
+                target.sectors = JSON.parse(JSON.stringify(sourceTrack.sectors));
+            }
+        }
 
         renderOSMTrack();
         renderFeatures();
         updateFeatureList();
+        updateFeatureList();
         updateCurbList();
+        updateSectorList();
         updateUIButtons();
         document.getElementById('import-modal').classList.add('hidden');
     });
@@ -651,11 +682,18 @@ function setupExportListener() {
 
         // Remove legacy internal fields if they exist
         delete exportData._pit_path;
+        delete exportData.osm;
+        delete exportData.source_urls;
+
+        // Calculate and add length
+        if (state.currentTrack.track_geometry?.polyline_geo) {
+            exportData.length_km = calculateTrackLength(state.currentTrack.track_geometry.polyline_geo);
+        }
 
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", (state.currentTrack.id || "track") + ".json");
+        downloadAnchorNode.setAttribute("download", (state.currentTrack.track_id || "track") + ".json");
         document.body.appendChild(downloadAnchorNode); // required for firefox
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
@@ -680,12 +718,21 @@ function setupSaveListener() {
             delete track._pit_entry;
             delete track._pit_exit;
             delete track.venue;
+            delete track.osm;
+            delete track.source_urls;
+            track.id = track.track_id;
 
             // Check if new or existing
             const isNew = !!track.isNew;
             delete track.isNew; // Don't send this flag to API
 
             track.has_been_updated = true;
+
+            // Calculate length if geometry exists
+            if (track.track_geometry && track.track_geometry.polyline_geo) {
+                track.length_km = calculateTrackLength(track.track_geometry.polyline_geo);
+                console.log("Calculated Length: " + track.length_km + " km");
+            }
 
             const endpoint = isNew ? '/api-tracks-add' : '/api-tracks-update';
             const url = `${state.apiBase}${endpoint}`;
@@ -1067,6 +1114,34 @@ function handleCurbClick(index, e) {
     }
 }
 
+function handleSectorClick(index, e) {
+    if (state.activeSectorIndex === null) return;
+    const sector = state.currentTrack.sectors[state.activeSectorIndex];
+
+    if (state.editingMode === 'DEFINE_SECTOR_START') {
+        sector.start_index = index;
+        console.log(`Sector Start: ${index}`);
+
+        state.editingMode = 'DEFINE_SECTOR_END';
+        updateUIButtons();
+        updateSectorList();
+    } else if (state.editingMode === 'DEFINE_SECTOR_END') {
+        sector.end_index = index;
+        // Fix order if reversed
+        if (sector.end_index < sector.start_index) {
+            const temp = sector.start_index;
+            sector.start_index = sector.end_index;
+            sector.end_index = temp;
+        }
+
+        state.editingMode = null;
+        state.activeSectorIndex = null;
+        updateUIButtons();
+        updateSectorList();
+        renderFeatures();
+    }
+}
+
 function deletePoint(index) {
     if (state.currentTrack.track_geometry.polyline_geo.length > 2) {
         saveTrackHistory();
@@ -1217,6 +1292,30 @@ function renderFeatures() {
             }
         });
     }
+
+    if (state.currentTrack.sectors) {
+        // Render Sectors (Highlighted track segments)
+        // Distinct color, slightly wider?
+        const geo = state.currentTrack.track_geometry.polyline_geo;
+        state.currentTrack.sectors.forEach((s, i) => {
+            if (typeof s.start_index === 'number' && typeof s.end_index === 'number') {
+                const pts = [];
+                for (let k = s.start_index; k <= s.end_index; k++) {
+                    const p = geo[k];
+                    pts.push([p._latitude, p._longitude]);
+                }
+
+                const isHighlighted = (i === state.highlightedSectorIndex);
+                L.polyline(pts, {
+                    color: isHighlighted ? 'cyan' : '#00ffff',
+                    weight: isHighlighted ? 12 : 8,
+                    opacity: isHighlighted ? 0.6 : 0.3,
+                    interactive: false
+                }).addTo(state.layers.features)
+                    .bindTooltip(s.name || `Sector ${i + 1}`);
+            }
+        });
+    }
     if (state.currentTrack.turns_and_straights) {
         state.currentTrack.turns_and_straights.forEach((t, i) => {
             if (t.geo_point) {
@@ -1260,7 +1359,9 @@ function restoreTrackHistory() {
     renderFeatures();
     updateUIButtons();
     updateFeatureList();
+    updateFeatureList();
     updateCurbList();
+    updateSectorList();
 }
 
 function findNearestPointOnPolyline(latlng, polyline) {
@@ -1324,6 +1425,35 @@ function getClosestPointOnSegment(pLat, pLon, aLat, aLon, bLat, bLon) {
     else { xx = x1 + param * C; yy = y1 + param * D; }
     return { lat: yy, lng: xx };
 }
+// Helper to shift indices when a point is inserted
+function adjustFeatureIndices(insertionIndex) {
+    if (!state.currentTrack) return;
+
+    // Shift Curbs
+    if (state.currentTrack.curbs) {
+        state.currentTrack.curbs.forEach(c => {
+            if (typeof c.start_index === 'number' && c.start_index >= insertionIndex) c.start_index++;
+            if (typeof c.end_index === 'number' && c.end_index >= insertionIndex) c.end_index++;
+        });
+    }
+
+    // Shift Sectors
+    if (state.currentTrack.sectors) {
+        state.currentTrack.sectors.forEach(s => {
+            if (typeof s.start_index === 'number' && s.start_index >= insertionIndex) s.start_index++;
+            if (typeof s.end_index === 'number' && s.end_index >= insertionIndex) s.end_index++;
+        });
+    }
+
+    // Shift Turns/Straights? (If used)
+    if (state.currentTrack.turns_and_straights) {
+        state.currentTrack.turns_and_straights.forEach(t => {
+            if (typeof t.start_index === 'number' && t.start_index >= insertionIndex) t.start_index++;
+            if (typeof t.end_index === 'number' && t.end_index >= insertionIndex) t.end_index++;
+        });
+    }
+}
+
 function getNearestSegmentIndex(latlng, polylineGeo) {
     let minDist = Infinity;
     let index = -1;
@@ -1339,6 +1469,27 @@ function getNearestSegmentIndex(latlng, polylineGeo) {
         if (dist < minDist) { minDist = dist; index = i; insertionPoint = currentLatLng; }
     }
     return { index, point: insertionPoint };
+}
+
+function calculateTrackLength(polylineGeo) {
+    if (!polylineGeo || polylineGeo.length < 2) return 0;
+    let distMeters = 0;
+    for (let i = 0; i < polylineGeo.length; i++) {
+        // Loop? usually track is closed loop if index.html says so? 
+        // Logic: Standard Open Loop for drawing, closed logic handled elsewhere?
+        // App seems to treat polyline as open strip of points.
+        // If it's a loop, first and last point should be same, or we imply it?
+        // Let's assume sequential points.
+        if (i < polylineGeo.length - 1) {
+            const p1 = L.latLng(polylineGeo[i]._latitude, polylineGeo[i]._longitude);
+            const p2 = L.latLng(polylineGeo[i + 1]._latitude, polylineGeo[i + 1]._longitude);
+            distMeters += p1.distanceTo(p2);
+        }
+    }
+    // Check if we should close the loop? 
+    // Usually tracks are loops. If start != end, maybe add segment?
+    // Let's stick to explicit geometry length for now.
+    return parseFloat((distMeters / 1000).toFixed(3));
 }
 
 
@@ -1532,28 +1683,51 @@ function setupMapInteractions() {
 
         // Edit Track
         if (state.editingMode === 'EDIT_TRACK') {
-            // Only process Map Clicks (Insert) if we didn't just click a marker.
-            // We can check if `potentialDragIndex` was set recently?
-            // Or rely on the fact that Mousedown stopped propagation.
-            // If propagation stopped, `map.click` won't fire. 
-            // Correct.
-
             const geo = state.currentTrack?.track_geometry?.polyline_geo;
             if (geo) {
                 // 1. If Selected: Insert point connected to it (Trace)
                 if (state.selectedTrackPointIndex !== null) {
-                    saveTrackHistory();
-                    const idx = state.selectedTrackPointIndex;
-                    geo.splice(idx + 1, 0, { _longitude: e.latlng.lng, _latitude: e.latlng.lat });
-                    state.selectedTrackPointIndex = idx + 1; // Advance selection
-                    renderOSMTrack();
-                    renderTrackWidth();
+                    // Check for snap to existing (LOOP CLOSURE or MERGE)
+                    // Use the SNAPPED point to check distance to vertices
+                    const clickedSnapped = getNearestPointOnPolyline(e.latlng, geo);
+                    if (!clickedSnapped) return;
+
+                    let nearestIdx = -1;
+                    let minD = Infinity;
+                    geo.forEach((p, i) => {
+                        const d = clickedSnapped.distanceTo(L.latLng(p._latitude, p._longitude));
+                        if (d < minD) { minD = d; nearestIdx = i; }
+                    });
+
+                    console.log(`[Snap Debug] Nearest Point Dist: ${minD.toFixed(2)}m (Idx: ${nearestIdx})`);
+
+                    if (nearestIdx !== -1 && minD < 5) {
+                        // User clicked very close to an existing point.
+                        // Instead of inserting, maybe they want to select it?
+                        // Or Connect? Use case: Tracing.
+                        // If we are tracing, and click existing, usually implies closing loop or joining.
+                        // For now, let's just SELECT that point to avoid duplicate
+                        state.selectedTrackPointIndex = nearestIdx;
+                        renderFeatures(); // Highlight selection
+                    } else {
+                        saveTrackHistory();
+                        const idx = state.selectedTrackPointIndex;
+                        geo.splice(idx + 1, 0, { _longitude: e.latlng.lng, _latitude: e.latlng.lat });
+                        adjustFeatureIndices(idx + 1); // Shift indices
+                        state.selectedTrackPointIndex = idx + 1; // Advance selection
+                        renderOSMTrack();
+                        renderTrackWidth();
+                    }
                 } else {
                     // 2. Normal Segment Insert
+                    // Check snap first? If clicking ON a point, select it?
+                    // Already handled by layer interactions?
+                    // Snap Logic for Insert
                     const info = getNearestSegmentIndex(e.latlng, geo);
                     if (info.index !== -1 && info.point) {
                         saveTrackHistory();
                         geo.splice(info.index + 1, 0, { _longitude: info.point.lng, _latitude: info.point.lat });
+                        adjustFeatureIndices(info.index + 1); // Shift indices
                         renderOSMTrack();
                         renderTrackWidth();
                     }
@@ -1616,18 +1790,22 @@ function setupMapInteractions() {
 
         if (state.editingMode === 'DEFINE_CURB_START' || state.editingMode === 'DEFINE_CURB_END') {
             // 1. Try to snap to existing VERTEX first
+            // Use the SNAPPED point (projection)
+            const clickedSnapped = getNearestPointOnPolyline(e.latlng, geo);
+            if (!clickedSnapped) return;
+
             let nearestIdx = -1;
             let minD = Infinity;
             geo.forEach((p, i) => {
                 const pll = L.latLng(p._latitude, p._longitude);
-                const d = e.latlng.distanceTo(pll);
+                const d = clickedSnapped.distanceTo(pll);
                 if (d < minD) { minD = d; nearestIdx = i; }
             });
 
-            // If very close to a vertex, use it
-            const vertexSnapDist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(L.latLng(geo[nearestIdx]._latitude, geo[nearestIdx]._longitude)));
+            console.log(`[Snap Debug] Nearest Point Dist: ${minD.toFixed(2)}m (Idx: ${nearestIdx})`);
 
-            if (nearestIdx !== -1 && vertexSnapDist < 15) {
+            // Snap Threshold: 5 meters
+            if (nearestIdx !== -1 && minD < 5) {
                 handleCurbClick(nearestIdx, e);
                 return;
             }
@@ -1638,10 +1816,49 @@ function setupMapInteractions() {
                 // Insert new point at the projected location
                 saveTrackHistory();
                 geo.splice(info.index + 1, 0, { _longitude: info.point.lng, _latitude: info.point.lat });
+                const newPointIdx = info.index + 1;
+                adjustFeatureIndices(newPointIdx); // Shift indices
+
                 renderOSMTrack();
                 renderTrackWidth();
                 // Determine new index (it's info.index + 1)
-                handleCurbClick(info.index + 1, e);
+                handleCurbClick(newPointIdx, e);
+                return;
+            }
+        }
+
+        if (state.editingMode === 'DEFINE_SECTOR_START' || state.editingMode === 'DEFINE_SECTOR_END') {
+            // 1. Try to snap to existing VERTEX first
+            const clickedSnapped = getNearestPointOnPolyline(e.latlng, geo);
+            if (!clickedSnapped) return;
+
+            let nearestIdx = -1;
+            let minD = Infinity;
+            geo.forEach((p, i) => {
+                const pll = L.latLng(p._latitude, p._longitude);
+                const d = clickedSnapped.distanceTo(pll);
+                if (d < minD) { minD = d; nearestIdx = i; }
+            });
+
+            console.log(`[Snap Debug] Nearest Point Dist: ${minD.toFixed(2)}m (Idx: ${nearestIdx})`);
+
+            // Snap Threshold: 5 meters
+            if (nearestIdx !== -1 && minD < 5) {
+                handleSectorClick(nearestIdx, e);
+                return;
+            }
+
+            // 2. If not close to vertex, insert
+            const info = getNearestSegmentIndex(e.latlng, geo);
+            if (info.point) {
+                saveTrackHistory();
+                geo.splice(info.index + 1, 0, { _longitude: info.point.lng, _latitude: info.point.lat });
+                const newPointIdx = info.index + 1;
+                adjustFeatureIndices(newPointIdx); // Shift indices
+
+                renderOSMTrack();
+                renderTrackWidth();
+                handleSectorClick(newPointIdx, e);
                 return;
             }
         }
@@ -1692,6 +1909,21 @@ function setupKeyboardControls() {
 // --- UI & Events ---
 
 function setupEventListeners() {
+    // Sidebar Toggling
+    document.querySelectorAll('.toggle-section-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent propagation if header has click events
+            const h3 = btn.closest('h3');
+            if (h3) {
+                const groupContent = h3.nextElementSibling;
+                if (groupContent && groupContent.classList.contains('group-content')) {
+                    groupContent.classList.toggle('collapsed');
+                    btn.classList.toggle('rotated');
+                }
+            }
+        });
+    });
+
     // Venue Search Typeahead
     const vInput = document.getElementById('venue-search');
     const vResults = document.getElementById('venue-results');
@@ -1743,14 +1975,14 @@ function setupEventListeners() {
         // User warning: val might be layout name. Ensure we get the ID.
         if (venue && state.venues[venue]) {
             // Try to find exact match on ID
-            const tById = state.venues[venue].find(t => t.id === val);
+            const tById = state.venues[venue].find(t => t.track_id === val);
             if (tById) {
-                trackId = tById.id;
+                trackId = tById.track_id;
             } else {
                 // Try to match by layout_name
                 const tByName = state.venues[venue].find(t => t.layout_name === val);
                 if (tByName) {
-                    trackId = tByName.id;
+                    trackId = tByName.track_id;
                 }
             }
         }
@@ -1887,6 +2119,21 @@ function setupEventListeners() {
     document.getElementById('btn-delete-point').addEventListener('click', () => {
         if (state.selectedTrackPointIndex !== null) {
             deletePoint(state.selectedTrackPointIndex);
+        }
+    });
+
+    document.getElementById('btn-add-sector').addEventListener('click', () => {
+        if (!state.currentTrack) return;
+        if (state.editingMode === 'DEFINE_SECTOR_START' || state.editingMode === 'DEFINE_SECTOR_END') {
+            setMode(null);
+            updateSectorList(); // Clean up incomplete
+        } else {
+            setMode('DEFINE_SECTOR_START');
+            const newSector = { name: "New Sector", start_index: null, end_index: null };
+            state.currentTrack.sectors.push(newSector);
+            state.activeSectorIndex = state.currentTrack.sectors.length - 1;
+            updateUIButtons();
+            updateSectorList();
         }
     });
 
@@ -2166,6 +2413,209 @@ function updateFeatureList() {
 
 // Start
 init();
+
+function updateSectorList() {
+    const list = document.getElementById('sector-list');
+    list.innerHTML = '';
+
+    if (!state.currentTrack || !state.currentTrack.sectors) return;
+
+    state.currentTrack.sectors.forEach((s, i) => {
+        const div = document.createElement('div');
+        div.className = 'feature-row'; // Use generic row class for consistency
+
+        // Status Indicator
+        const status = document.createElement('span');
+        status.style.minWidth = '20px'; // consistent spacing
+        status.style.textAlign = 'center';
+        status.style.color = '#00ff00';
+        status.textContent = (typeof s.start_index === 'number' && typeof s.end_index === 'number') ? '✓' : '';
+
+        // Name Input
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = s.name || `Sector ${i + 1}`;
+        nameInput.onchange = (e) => {
+            s.name = e.target.value;
+            renderFeatures();
+        };
+
+        // Define/Target Button
+        const targetBtn = document.createElement('button');
+        targetBtn.className = 'icon-btn';
+        targetBtn.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+        targetBtn.title = 'Redefine Sector';
+        if (state.activeSectorIndex === i && (state.editingMode === 'DEFINE_SECTOR_START' || state.editingMode === 'DEFINE_SECTOR_END')) {
+            targetBtn.classList.add('active');
+        }
+        targetBtn.onclick = () => {
+            if (state.activeSectorIndex === i) {
+                // Cancel
+                setMode(null);
+                state.activeSectorIndex = null;
+            } else {
+                // Start Defining
+                state.activeSectorIndex = i;
+                setMode('DEFINE_SECTOR_START');
+            }
+            updateUIButtons();
+            updateSectorList();
+        };
+
+        // Delete Button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'icon-btn';
+        delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        delBtn.title = 'Delete Sector';
+        delBtn.onclick = () => {
+            state.currentTrack.sectors.splice(i, 1);
+            if (state.activeSectorIndex === i) {
+                state.activeSectorIndex = null;
+                setMode(null);
+            }
+            updateSectorList();
+            renderFeatures();
+        };
+
+        div.appendChild(status);
+        div.appendChild(nameInput);
+        div.appendChild(targetBtn);
+        div.appendChild(delBtn);
+
+        // Hover Effect
+        div.onmouseenter = () => {
+            state.highlightedSectorIndex = i;
+            renderFeatures();
+        };
+        div.onmouseleave = () => {
+            state.highlightedSectorIndex = null;
+            renderFeatures();
+        };
+
+        list.appendChild(div);
+    });
+}
+
+function updateUIButtons() {
+    if (!state.currentTrack) {
+        // Disable everything EXCEPT create buttons and MODAL contents
+        document.querySelectorAll('button:not(#btn-create-venue):not(#btn-create-track):not(#btn-settings)').forEach(b => {
+            // If button is inside a modal, don't disable it
+            if (!b.closest('.modal')) b.disabled = true;
+        });
+
+        document.querySelectorAll('input:not(#venue-search):not(#filter-non-modified)').forEach(i => {
+            if (!i.closest('.modal')) i.disabled = true;
+        });
+
+        document.querySelectorAll('select:not(#track-select)').forEach(s => {
+            if (!s.closest('.modal')) s.disabled = true;
+        });
+        return;
+    }
+
+    // Enable basic controls (Re-enable non-modals specifically? Or just all?)
+    // Simpler to just enable all, but respect specific disabled states like undo
+    document.querySelectorAll('button:not(#btn-undo-track):not(#btn-undo-pit):not(#btn-delete-point):not(#btn-delete-range):not(#btn-reset-track)').forEach(b => b.disabled = false);
+    document.querySelectorAll('input').forEach(i => i.disabled = false);
+    document.querySelectorAll('select').forEach(s => s.disabled = false);
+
+    // Specific Mode States
+    const setBtnState = (id, activeText) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const icon = btn.querySelector('.status-icon');
+        if (state.editingMode === activeText) { // Logic misuse of param name, but works for mapping
+            // But we match logic below
+        }
+    };
+
+    // Helper
+    const updateBtn = (id, mode) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const isActive = (state.editingMode === mode);
+        if (isActive) {
+            btn.classList.add('active');
+            btn.innerHTML = `Cancel <span class="status-icon"><i class="fa-solid fa-ban"></i></span>`;
+        } else {
+            btn.classList.remove('active');
+            // Reset text (Hardcoded for now or store original?)
+            // We'll just reset based on ID
+            if (id === 'btn-sf-line') btn.innerHTML = `Add Start/Finish Line <span class="status-icon"></span>`;
+            if (id === 'btn-pit-entry') btn.innerHTML = `Add Pit Entry <span class="status-icon"></span>`;
+            if (id === 'btn-pit-exit') btn.innerHTML = `Add Pit Exit <span class="status-icon"></span>`;
+            if (id === 'btn-trace-pit') btn.innerHTML = `Trace Pitlane <span class="status-icon"></span>`;
+            if (id === 'btn-add-turn') btn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
+            if (id === 'btn-add-curb-entry') btn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
+            if (id === 'btn-pick-center') btn.innerHTML = `<i class="fa-solid fa-map-pin"></i>`;
+            if (id === 'btn-add-sector') btn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
+        }
+    };
+
+    updateBtn('btn-sf-line', 'SF_LINE');
+    updateBtn('btn-pit-entry', 'PIT_ENTRY');
+    updateBtn('btn-pit-exit', 'PIT_EXIT');
+    updateBtn('btn-trace-pit', 'TRACE_PIT');
+    updateBtn('btn-pick-center', 'DEFINE_CENTER');
+
+    // Turn Button State
+    const btnTurn = document.getElementById('btn-add-turn');
+    if (state.editingMode === 'TURN_POINT') {
+        btnTurn.classList.add('active');
+        btnTurn.innerHTML = `<i class="fa-solid fa-ban"></i>`;
+    } else {
+        btnTurn.classList.remove('active');
+        btnTurn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
+    }
+
+    // Curb Button State
+    const btnCurb = document.getElementById('btn-add-curb-entry');
+    if (state.editingMode === 'DEFINE_CURB_START' || state.editingMode === 'DEFINE_CURB_END') {
+        btnCurb.classList.add('active');
+        btnCurb.innerHTML = (state.editingMode === 'DEFINE_CURB_START') ? 'Start...' : 'End...';
+        if (state.editingMode === 'DEFINE_CURB_END') btnCurb.classList.add('flashing'); else btnCurb.classList.remove('flashing');
+    } else {
+        btnCurb.classList.remove('active');
+        btnCurb.classList.remove('flashing');
+        btnCurb.innerHTML = `<i class="fa-solid fa-plus"></i>`;
+    }
+
+    // Sector Button State
+    const btnSector = document.getElementById('btn-add-sector');
+    if (state.editingMode === 'DEFINE_SECTOR_START' || state.editingMode === 'DEFINE_SECTOR_END') {
+        btnSector.classList.add('active');
+        btnSector.innerHTML = (state.editingMode === 'DEFINE_SECTOR_START') ? 'Start...' : 'End...';
+        if (state.editingMode === 'DEFINE_SECTOR_END') btnSector.classList.add('flashing'); else btnSector.classList.remove('flashing');
+    } else {
+        btnSector.classList.remove('active');
+        btnSector.classList.remove('flashing');
+        btnSector.innerHTML = `<i class="fa-solid fa-plus"></i>`;
+    }
+
+    // Edit Track Buttons
+    const btnEdit = document.getElementById('btn-edit-trace');
+    if (state.editingMode === 'EDIT_TRACK') {
+        btnEdit.classList.add('active');
+        btnEdit.textContent = "Exit Edit Mode";
+        document.getElementById('btn-undo-track').disabled = false;
+        document.getElementById('btn-delete-point').disabled = (state.selectedTrackPointIndex === null);
+        document.getElementById('btn-delete-range').disabled = false;
+    } else if (state.editingMode === 'DELETE_RANGE') {
+        btnEdit.textContent = "Edit Track Geometry";
+        btnEdit.disabled = true; // Cannot switch directly?
+        document.getElementById('btn-delete-range').classList.add('active');
+    } else {
+        btnEdit.classList.remove('active');
+        btnEdit.textContent = "Toggle Edit Track Geometry Mode"; // Fixed Label
+        document.getElementById('btn-undo-track').disabled = true;
+        document.getElementById('btn-delete-point').disabled = true;
+        document.getElementById('btn-delete-range').disabled = true;
+        document.getElementById('btn-delete-range').classList.remove('active');
+    }
+    // Always enable Reset if track exists
+    document.getElementById('btn-reset-track').disabled = false;
+}
 
 function updateCurbList() {
     const list = document.getElementById('curb-list');
