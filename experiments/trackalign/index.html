@@ -50,6 +50,27 @@
                 </div>
             </div>
 
+            <!-- Location Section -->
+            <div class="control-group">
+                <h3>Track Location</h3>
+                <label>Address</label>
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <input type="text" id="track-address" placeholder="Street Address, City..." style="flex-grow: 1;">
+                    <button id="btn-geocode-address" class="icon-btn" title="Update from Text"><i
+                            class="fa-solid fa-magnifying-glass-location"></i></button>
+                </div>
+
+                <label>Center Point (Lat, Lon)</label>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <input type="text" id="center-lat" placeholder="Latitude" style="width: 80px;" readonly>
+                    <input type="text" id="center-lon" placeholder="Longitude" style="width: 80px;" readonly>
+                    <button id="btn-pick-center" class="icon-btn" title="Pick on Map"><i
+                            class="fa-solid fa-map-pin"></i></button>
+                    <button id="btn-center-map" class="icon-btn" title="Go to Center"><i
+                            class="fa-solid fa-crosshairs"></i></button>
+                </div>
+            </div>
+
             <!-- Tools Section -->
             <div class="control-group">
                 <h3>Track Tools</h3>

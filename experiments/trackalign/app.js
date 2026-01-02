@@ -527,8 +527,29 @@ async function loadTrack(trackId) {
     updateFeatureList();
     updateCurbList();
 
+
     // 5. Check for Imports
     checkForSiblingEdits(track);
+
+    // 6. Update Location Inputs
+    const addrInput = document.getElementById('track-address');
+    const latInput = document.getElementById('center-lat');
+    const lonInput = document.getElementById('center-lon');
+
+    // Address
+    let fullAddr = track.street_address || "";
+    // If we have country code but it's not in address, maybe append? 
+    // Usually street_address is enough. 
+    addrInput.value = fullAddr;
+
+    // Center
+    if (track.center && track.center.geo_point) {
+        latInput.value = track.center.geo_point._latitude.toFixed(6);
+        lonInput.value = track.center.geo_point._longitude.toFixed(6);
+    } else {
+        latInput.value = '';
+        lonInput.value = '';
+    }
 }
 function checkForSiblingEdits(track) {
     if (!track.venue) return;
@@ -1472,17 +1493,42 @@ function setupMapInteractions() {
         }
     });
 
-    map.on('click', (e) => {
-        // If we are handling internal clicks (via mouseup), prevent map click logic?
-        // Leaflet click fires on mouseup. 
-        // We need to be careful not to trigger "Insert Point" immediately after "Select Point".
-        // Luckily, we stopped propagation on mousedown/mouseup on markers?
-        // Actually, we process marker-mouseup logic above.
-        // If that logic runs, does the map still receive 'click'?
-        // If we didn't stop prop on mouseup chain, yes.
-        // But we handle it.
-
+    map.on('click', async (e) => {
         if (!state.editingMode) return;
+
+        // Define Center
+        if (state.editingMode === 'DEFINE_CENTER') {
+            if (!state.currentTrack) return;
+
+            // Update Center
+            if (!state.currentTrack.center) state.currentTrack.center = {};
+            state.currentTrack.center.geo_point = { _latitude: e.latlng.lat, _longitude: e.latlng.lng };
+
+            // Update Inputs
+            document.getElementById('center-lat').value = e.latlng.lat.toFixed(6);
+            document.getElementById('center-lon').value = e.latlng.lng.toFixed(6);
+
+            // Reverse Geocode
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.latlng.lat}&lon=${e.latlng.lng}&addressdetails=1`);
+                const data = await res.json();
+                if (data && data.address) {
+                    const countryCode = data.address.country_code || "";
+                    let streetAddr = data.address.road || "";
+                    if (data.address.house_number) streetAddr = data.address.house_number + " " + streetAddr;
+                    if (!streetAddr) streetAddr = data.display_name ? data.display_name.split(',')[0] : "";
+
+                    state.currentTrack.country_code = countryCode;
+                    state.currentTrack.street_address = streetAddr;
+                    document.getElementById('track-address').value = streetAddr; // Update UI
+                }
+            } catch (err) {
+                console.warn("Reverse geocode failed", err);
+            }
+
+            setMode(null); // Exit mode
+            return;
+        }
 
         // Edit Track
         if (state.editingMode === 'EDIT_TRACK') {
@@ -1712,6 +1758,56 @@ function setupEventListeners() {
         if (trackId) loadTrack(trackId);
     });
 
+
+    // Location Controls
+    document.getElementById('track-address').addEventListener('change', (e) => {
+        if (state.currentTrack) {
+            state.currentTrack.street_address = e.target.value;
+        }
+    });
+
+    document.getElementById('btn-geocode-address').addEventListener('click', async () => {
+        const addr = document.getElementById('track-address').value;
+        if (!addr || !state.currentTrack) return;
+
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(addr)}`);
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lon = parseFloat(data[0].lon);
+
+                // Update Center
+                if (!state.currentTrack.center) state.currentTrack.center = {};
+                state.currentTrack.center.geo_point = { _latitude: lat, _longitude: lon };
+
+                // Update UI
+                document.getElementById('center-lat').value = lat.toFixed(6);
+                document.getElementById('center-lon').value = lon.toFixed(6);
+
+                // Pan map
+                map.setView([lat, lon], 16);
+
+                // Update Country Code if found
+                if (data[0].address?.country_code) {
+                    state.currentTrack.country_code = data[0].address.country_code;
+                }
+            } else {
+                alert("Address not found.");
+            }
+        } catch (e) {
+            console.error("Geocoding error", e);
+            alert("Geocoding failed.");
+        }
+    });
+
+    document.getElementById('btn-pick-center').addEventListener('click', () => setMode('DEFINE_CENTER'));
+    document.getElementById('btn-center-map').addEventListener('click', () => {
+        if (state.currentTrack?.center?.geo_point) {
+            map.setView([state.currentTrack.center.geo_point._latitude, state.currentTrack.center.geo_point._longitude], 16);
+        }
+    });
+
     document.getElementById('btn-sf-line').addEventListener('click', () => setMode('SF_LINE'));
     document.getElementById('btn-pit-entry').addEventListener('click', () => setMode('PIT_ENTRY'));
     document.getElementById('btn-pit-exit').addEventListener('click', () => setMode('PIT_EXIT'));
@@ -1896,8 +1992,8 @@ function updateUIButtons() {
     if (state.editingMode === 'PIT_ENTRY') document.getElementById('btn-pit-entry').classList.add('active');
     if (state.editingMode === 'PIT_EXIT') document.getElementById('btn-pit-exit').classList.add('active');
     if (state.editingMode === 'TRACE_PIT') document.getElementById('btn-trace-pit').classList.add('active');
-    if (state.editingMode === 'TRACE_PIT') document.getElementById('btn-trace-pit').classList.add('active');
     if (state.editingMode === 'EDIT_TRACK') document.getElementById('btn-edit-trace').classList.add('active');
+    if (state.editingMode === 'DEFINE_CENTER') document.getElementById('btn-pick-center').classList.add('active');
 
     updateStatusIcon('btn-sf-line', !!state.currentTrack?.start_finish?.geo_point);
     updateStatusIcon('btn-pit-entry', !!state.currentTrack?.pit?.entry?.geo_point);
