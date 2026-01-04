@@ -1199,6 +1199,13 @@ function renderPitWidth() {
 function renderFeatures() {
     if (state.layers.features) state.layers.features.clearLayers();
     else state.layers.features = L.layerGroup().addTo(map);
+
+    if (state.layers.preview) state.layers.preview.clearLayers();
+    else state.layers.preview = L.layerGroup().addTo(map);
+
+    if (state.layers.interaction) state.layers.interaction.clearLayers();
+    else state.layers.interaction = L.layerGroup().addTo(map);
+
     if (state.layers.pitLane) state.layers.pitLane.clearLayers();
     else state.layers.pitLane = L.layerGroup().addTo(map);
     if (!state.currentTrack) return;
@@ -1644,7 +1651,148 @@ function setupMapInteractions() {
         }
     });
 
+    // Live Preview Handler
+    map.on('mousemove', (e) => {
+        if (!state.currentTrack || !state.currentTrack.track_geometry?.polyline_geo) return;
+        if (!state.layers.preview) return; // Guard
+
+        // Only for END definition modes
+        if (state.editingMode !== 'DEFINE_CURB_END' && state.editingMode !== 'DEFINE_SECTOR_END') {
+            if (state.layers.preview.getLayers().length > 0) state.layers.preview.clearLayers();
+            return;
+        }
+
+        const geo = state.currentTrack.track_geometry.polyline_geo;
+        let startIndex = null;
+        let style = {};
+
+        // Get Start Index based on mode
+        if (state.editingMode === 'DEFINE_CURB_END') {
+            if (state.activeCurbIndex === null) return;
+            const c = state.currentTrack.curbs[state.activeCurbIndex];
+            if (!c || typeof c.start_index !== 'number') return;
+            startIndex = c.start_index;
+            style = { color: 'red', weight: 4, opacity: 0.6, dashArray: '5, 5' };
+        } else if (state.editingMode === 'DEFINE_SECTOR_END') {
+            if (state.activeSectorIndex === null) return;
+            const s = state.currentTrack.sectors[state.activeSectorIndex];
+            if (!s || typeof s.start_index !== 'number') return;
+            startIndex = s.start_index;
+            style = { color: 'cyan', weight: 6, opacity: 0.6 };
+        }
+
+        if (startIndex === null) return;
+
+        // Calculate Project Point
+        // We use the same 'clamped' logic as click
+        const snapped = getNearestPointOnPolyline(e.latlng, geo);
+        if (!snapped) return;
+
+        // Find which segment this snapped point belongs to
+        // We need the numeric index. getNearestPointOnPolyline doesn't return it directly, 
+        // but we can look it up or use getNearestSegmentIndex logic.
+        const segInfo = getNearestSegmentIndex(e.latlng, geo);
+        if (segInfo.index === -1) return;
+
+        // Build path: Start Point -> Intermediate Points -> Snapped Point
+        // CAUTION: Direction? User might go backwards. 
+        // For simplicity, we assume forward or handle loop?
+        // Let's assume smallest path or just linear forward for now.
+        // If end < start (wrap around?), logic gets complex. 
+        // Simple linear implementation first:
+
+        // Check for Offset Logic (Curbs)
+        const isCurb = (state.editingMode === 'DEFINE_CURB_END');
+        let curbSide = null;
+        if (isCurb) {
+            const c = state.currentTrack.curbs[state.activeCurbIndex];
+            curbSide = c ? c.side : null;
+        }
+
+        // Projection Helper Vars
+        const centerLat = map.getCenter().lat;
+        const metersPerDegreeLat = 111132.92;
+        const metersPerDegreeLon = 111412.84 * Math.cos(centerLat * Math.PI / 180);
+        const widthMeters = state.trackWidth / 2;
+
+        const getOffsetPoint = (p, pPrev, pNext) => {
+            if (!isCurb || !curbSide) return L.latLng(p._latitude, p._longitude);
+
+            let dx = pNext._longitude - pPrev._longitude;
+            let dy = pNext._latitude - pPrev._latitude;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len === 0) return L.latLng(p._latitude, p._longitude);
+
+            dx /= len; dy /= len;
+            let nx = -dy;
+            let ny = dx;
+
+            if (curbSide === 'right') { nx = -nx; ny = -ny; }
+
+            const offLon = (nx * widthMeters) / metersPerDegreeLon;
+            const offLat = (ny * widthMeters) / metersPerDegreeLat;
+
+            return L.latLng(p._latitude + offLat, p._longitude + offLon);
+        };
+
+        let pathPts = [];
+
+        // Build raw indices first 
+        let rawIndices = [];
+        if (segInfo.index >= startIndex) {
+            // Forward
+            for (let i = startIndex; i <= segInfo.index; i++) rawIndices.push(i);
+        } else {
+            // Loop
+            for (let i = startIndex; i < geo.length; i++) rawIndices.push(i);
+            for (let i = 0; i <= segInfo.index; i++) rawIndices.push(i);
+        }
+
+        // Convert to LatLngs (with offset if needed)
+        // We need Context (Prev/Next) for offset normal
+        // For the snapped point (last point), we use the segment orientation
+
+        rawIndices.forEach((idx) => {
+            const p = geo[idx];
+            const pNext = geo[Math.min(idx + 1, geo.length - 1)]; // Or wrap?
+            const pPrev = geo[Math.max(idx - 1, 0)]; // Or wrap?
+            // Actually, best to use the segment vector [idx, idx+1] for standard block
+            // But for vertex-based offset, taking average of prev/next segments is smoother?
+            // renderFeatures uses standard "Next - Prev" tangent
+            pathPts.push(getOffsetPoint(p, pPrev, pNext));
+        });
+
+        // Add Snapped Point
+        // Calculate offset for snapped point using the CURRENT segment slope
+        if (isCurb) {
+            const p1 = geo[segInfo.index];
+            const p2 = geo[segInfo.index + 1] || geo[0]; // Wrap logic if loop
+            // Just use p1->p2 vector
+            let dx = p2._longitude - p1._longitude;
+            let dy = p2._latitude - p1._latitude;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                dx /= len; dy /= len;
+                let nx = -dy; let ny = dx;
+                if (curbSide === 'right') { nx = -nx; ny = -ny; }
+                const offLon = (nx * widthMeters) / metersPerDegreeLon;
+                const offLat = (ny * widthMeters) / metersPerDegreeLat;
+                pathPts.push(L.latLng(snapped.lat + offLat, snapped.lng + offLon));
+            } else {
+                pathPts.push(snapped);
+            }
+        } else {
+            pathPts.push(snapped);
+        }
+
+        state.layers.preview.clearLayers();
+        L.polyline(pathPts, style).addTo(state.layers.preview);
+    });
+
     map.on('click', async (e) => {
+        // Clear preview immediately on click
+        if (state.layers.preview) state.layers.preview.clearLayers();
+
         if (!state.editingMode) return;
 
         // Define Center
@@ -2058,6 +2206,36 @@ function setupEventListeners() {
         setMode('DEFINE_CURB_START', null, newIndex);
     });
 
+    document.getElementById('btn-add-sector').onclick = () => {
+        if (!state.currentTrack) return;
+        if (!state.currentTrack.sectors) state.currentTrack.sectors = [];
+
+        const sectors = state.currentTrack.sectors;
+        let newStart = null;
+        let nextMode = 'DEFINE_SECTOR_START';
+
+        // Auto-link to previous sector if exists
+        if (sectors.length > 0) {
+            const lastSector = sectors[sectors.length - 1];
+            if (typeof lastSector.end_index === 'number') {
+                newStart = lastSector.end_index;
+                nextMode = 'DEFINE_SECTOR_END';
+            }
+        }
+
+        state.currentTrack.sectors.push({
+            name: `Sector ${sectors.length + 1}`,
+            start_index: newStart,
+            end_index: null
+        });
+
+        // Activate Mode for the new sector
+        state.activeSectorIndex = sectors.length - 1;
+        setMode(nextMode);
+
+        updateSectorList();
+        renderFeatures();
+    };
     document.getElementById('btn-add-turn').addEventListener('click', () => {
         if (!state.currentTrack) return;
         if (!state.currentTrack.turns_and_straights) state.currentTrack.turns_and_straights = [];
@@ -2122,20 +2300,7 @@ function setupEventListeners() {
         }
     });
 
-    document.getElementById('btn-add-sector').addEventListener('click', () => {
-        if (!state.currentTrack) return;
-        if (state.editingMode === 'DEFINE_SECTOR_START' || state.editingMode === 'DEFINE_SECTOR_END') {
-            setMode(null);
-            updateSectorList(); // Clean up incomplete
-        } else {
-            setMode('DEFINE_SECTOR_START');
-            const newSector = { name: "New Sector", start_index: null, end_index: null };
-            state.currentTrack.sectors.push(newSector);
-            state.activeSectorIndex = state.currentTrack.sectors.length - 1;
-            updateUIButtons();
-            updateSectorList();
-        }
-    });
+
 
     const btnDeleteRange = document.getElementById('btn-delete-range');
     if (btnDeleteRange) {
@@ -2468,13 +2633,15 @@ function updateSectorList() {
         delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
         delBtn.title = 'Delete Sector';
         delBtn.onclick = () => {
-            state.currentTrack.sectors.splice(i, 1);
-            if (state.activeSectorIndex === i) {
-                state.activeSectorIndex = null;
-                setMode(null);
+            if (confirm("Are you sure you want to delete this sector?")) {
+                state.currentTrack.sectors.splice(i, 1);
+                if (state.activeSectorIndex === i) {
+                    state.activeSectorIndex = null;
+                    setMode(null);
+                }
+                updateSectorList();
+                renderFeatures();
             }
-            updateSectorList();
-            renderFeatures();
         };
 
         div.appendChild(status);
