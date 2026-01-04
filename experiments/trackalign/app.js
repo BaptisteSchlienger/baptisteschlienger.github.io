@@ -1094,21 +1094,16 @@ function handleCurbClick(index, e) {
         curb.side = (cross > 0) ? 'left' : 'right';
         console.log(`Curb Start: ${index}, Side: ${curb.side}`);
 
-        state.editingMode = 'DEFINE_CURB_END';
-        updateUIButtons();
+        setMode('DEFINE_CURB_END', null, state.activeCurbIndex);
         updateCurbList();
     } else if (state.editingMode === 'DEFINE_CURB_END') {
+        const curb = state.currentTrack.curbs[state.activeCurbIndex];
+        // We do NOT swap min/max anymore, to allow wrap-around
+        // Assume user clicks in order Direction of Travel
         curb.end_index = index;
-        // Fix order if reversed
-        if (curb.end_index < curb.start_index) {
-            const temp = curb.start_index;
-            curb.start_index = curb.end_index;
-            curb.end_index = temp;
-        }
 
-        state.editingMode = null;
+        setMode(null);
         state.activeCurbIndex = null;
-        updateUIButtons();
         updateCurbList();
         renderFeatures();
     }
@@ -1122,25 +1117,19 @@ function handleSectorClick(index, e) {
         sector.start_index = index;
         console.log(`Sector Start: ${index}`);
 
-        state.editingMode = 'DEFINE_SECTOR_END';
-        updateUIButtons();
+        setMode('DEFINE_SECTOR_END');
         updateSectorList();
     } else if (state.editingMode === 'DEFINE_SECTOR_END') {
         sector.end_index = index;
-        // Fix order if reversed
-        if (sector.end_index < sector.start_index) {
-            const temp = sector.start_index;
-            sector.start_index = sector.end_index;
-            sector.end_index = temp;
-        }
 
-        state.editingMode = null;
+        setMode(null);
         state.activeSectorIndex = null;
         updateUIButtons();
         updateSectorList();
         renderFeatures();
     }
 }
+
 
 function deletePoint(index) {
     if (state.currentTrack.track_geometry.polyline_geo.length > 2) {
@@ -1260,31 +1249,32 @@ function renderFeatures() {
         state.currentTrack.curbs.forEach((c, i) => {
             if (typeof c.start_index === 'number' && typeof c.end_index === 'number') {
                 const pts = [];
-                for (let k = c.start_index; k <= c.end_index; k++) {
-                    const p = geo[k];
-                    // Calculate Normal
-                    const pNext = geo[Math.min(k + 1, geo.length - 1)];
-                    const pPrev = geo[Math.max(k - 1, 0)];
-                    let dx = pNext._longitude - pPrev._longitude;
-                    let dy = pNext._latitude - pPrev._latitude;
-                    const len = Math.sqrt(dx * dx + dy * dy);
-                    if (len === 0) continue;
-                    dx /= len; dy /= len;
 
-                    // Normal (Left)
-                    let nx = -dy;
-                    let ny = dx;
-
-                    if (c.side === 'right') {
-                        nx = -nx;
-                        ny = -ny;
+                const addSegment = (start, end) => {
+                    for (let k = start; k <= end; k++) {
+                        const p = geo[k];
+                        // Calculate Normal
+                        const pNext = geo[Math.min(k + 1, geo.length - 1)];
+                        const pPrev = geo[Math.max(k - 1, 0)];
+                        let dx = pNext._longitude - pPrev._longitude;
+                        let dy = pNext._latitude - pPrev._latitude;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        if (len === 0) continue;
+                        dx /= len; dy /= len;
+                        let nx = -dy; let ny = dx;
+                        if (c.side === 'right') { nx = -nx; ny = -ny; }
+                        const offLon = (nx * widthMeters) / metersPerDegreeLon;
+                        const offLat = (ny * widthMeters) / metersPerDegreeLat;
+                        pts.push([p._latitude + offLat, p._longitude + offLon]);
                     }
+                };
 
-                    // Offset
-                    const offLon = (nx * widthMeters) / metersPerDegreeLon;
-                    const offLat = (ny * widthMeters) / metersPerDegreeLat;
-
-                    pts.push([p._latitude + offLat, p._longitude + offLon]);
+                if (c.start_index <= c.end_index) {
+                    addSegment(c.start_index, c.end_index);
+                } else {
+                    // Wrap around
+                    addSegment(c.start_index, geo.length - 1);
+                    addSegment(0, c.end_index);
                 }
 
                 const isHighlighted = (i === state.highlightedCurbIndex);
@@ -1307,9 +1297,20 @@ function renderFeatures() {
         state.currentTrack.sectors.forEach((s, i) => {
             if (typeof s.start_index === 'number' && typeof s.end_index === 'number') {
                 const pts = [];
-                for (let k = s.start_index; k <= s.end_index; k++) {
-                    const p = geo[k];
-                    pts.push([p._latitude, p._longitude]);
+
+                const addSegment = (start, end) => {
+                    for (let k = start; k <= end; k++) {
+                        const p = geo[k];
+                        pts.push([p._latitude, p._longitude]);
+                    }
+                };
+
+                if (s.start_index <= s.end_index) {
+                    addSegment(s.start_index, s.end_index);
+                } else {
+                    // Wrap around
+                    addSegment(s.start_index, geo.length - 1);
+                    addSegment(0, s.end_index);
                 }
 
                 const isHighlighted = (i === state.highlightedSectorIndex);
