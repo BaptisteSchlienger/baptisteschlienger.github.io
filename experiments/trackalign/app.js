@@ -120,8 +120,8 @@ async function init() {
         setupSaveListener();
 
         // Filter Listener
-        document.getElementById('filter-non-modified').addEventListener('change', () => {
-            fetchTrackList(); // Refresh list on toggle
+        document.getElementById('filter-status').addEventListener('change', () => {
+            fetchTrackList();
         });
 
         updateUIButtons(); // Initial State
@@ -137,8 +137,8 @@ async function fetchTrackList() {
         const token = await generateJWT(state.apiKey);
 
         // Check filter
-        const nonModified = document.getElementById('filter-non-modified')?.checked || false;
-        const query = nonModified ? '?non_modified=true' : '';
+        const statusFilter = document.getElementById('filter-status')?.value || '';
+        const query = statusFilter ? `?status=${statusFilter}` : '';
 
         const res = await fetch(`${state.apiBase}/api-tracks-list${query}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -1910,7 +1910,7 @@ function setupMapInteractions() {
                     let nearestIdx = -1;
                     let minD = Infinity;
                     geo.forEach((p, i) => {
-                        const d = clickedSnapped.distanceTo(L.latLng(p._latitude, p._longitude));
+                        const d = e.latlng.distanceTo(L.latLng(p._latitude, p._longitude));
                         if (d < minD) { minD = d; nearestIdx = i; }
                     });
 
@@ -2607,7 +2607,7 @@ function updateUIButtons() {
         const allInputs = document.querySelectorAll('.control-group input');
         allInputs.forEach(i => {
             // Exclude filter checkbox and venue search
-            if (i.id !== 'filter-non-modified' && i.id !== 'venue-search') {
+            if (i.id !== 'filter-status' && i.id !== 'venue-search') {
                 i.disabled = true;
             }
         });
