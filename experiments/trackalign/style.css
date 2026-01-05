@@ -2,11 +2,16 @@ body {
     margin: 0;
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    display: flex;
     height: 100vh;
     overflow: hidden;
     background: #1a1a1a;
     color: #eee;
+}
+
+#app-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
 }
 
 #sidebar {
@@ -554,5 +559,112 @@ button {
 
 .result-item:hover {
     background: #333;
+    color: #fff;
+}
+
+/* Full Page Loader */
+#loader-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(3px);
+}
+
+#loader-overlay.hidden {
+    display: none !important;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #00ff00;
+    animation: spin 1s ease-in-out infinite;
+    margin-bottom: 15px;
+}
+
+.loader-text {
+    color: #fff;
+    font-size: 1.2rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Status Toggle */
+.toggle-switch {
+    position: relative;
+    width: 140px;
+    height: 30px;
+    background: #222;
+    border-radius: 15px;
+    border: 1px solid #444;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px;
+    box-sizing: border-box;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.toggle-switch input {
+    display: none;
+}
+
+.toggle-switch-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 50%;
+    /* roughly */
+    width: calc(50% - 4px);
+    height: calc(100% - 4px);
+    background: #d35400;
+    /* Default WIP Orange */
+    border-radius: 13px;
+    transition: all 0.3s ease;
+    z-index: 1;
+}
+
+.toggle-switch input:checked~.toggle-switch-slider {
+    left: 50%;
+    background: #27ae60;
+    /* DONE Green */
+}
+
+.toggle-label {
+    flex: 1;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #666;
+    z-index: 2;
+    transition: color 0.3s;
+    user-select: none;
+}
+
+/* WIP Label state */
+.toggle-switch input:not(:checked)~.label-wip {
+    color: #fff;
+}
+
+/* DONE Label state */
+.toggle-switch input:checked~.label-done {
     color: #fff;
 }

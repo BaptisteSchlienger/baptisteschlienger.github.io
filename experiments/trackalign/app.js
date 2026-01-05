@@ -360,22 +360,22 @@ function setupSettingsListeners() {
 // --- Logic ---
 
 async function loadTrack(trackId) {
-    console.log("Trying to load track: " + trackId);
+    console.log(`Loading track: ${trackId}`);
 
-    // UI Loading State
-    const loader = document.getElementById('track-loader');
-    const select = document.getElementById('track-select');
-    if (loader) loader.style.display = 'inline-block';
-    if (select) select.disabled = true;
+    // Show Loader
+    const loader = document.getElementById('loader-overlay');
+    if (loader) loader.classList.remove('hidden');
 
-    // 1. Fetch Full Details
-    // 1. Fetch Full Details
     try {
-        // Find venue to get all sibling IDs
-        let idsToFetch = [trackId];
         let venueName = null;
+        let idsToFetch = [];
 
-        // Find which venue group this track belongs to
+        // 1. Find Venue and Siblings
+        // We need all tracks for this venue to update state correctly?
+        // Actually, we just need the one track, but the API usually returns list?
+        // API is 'api-tracks-get' taking IDs.
+
+        // Find venue of this track
         for (const [vName, tracks] of Object.entries(state.venues)) {
             if (tracks.find(t => t.track_id === trackId)) {
                 venueName = vName;
@@ -444,6 +444,11 @@ async function loadTrack(trackId) {
         if (!state.currentTrack.pit.exit) state.currentTrack.pit.exit = { geo_point: null };
         if (!state.currentTrack.pit.polyline_geo) state.currentTrack.pit.polyline_geo = [];
 
+        // Ensure metadata exists
+        if (!state.currentTrack.metadata) state.currentTrack.metadata = {};
+        if (state.currentTrack.metadata.status === undefined) state.currentTrack.metadata.status = 'WIP';
+        if (state.currentTrack.metadata.comment === undefined) state.currentTrack.metadata.comment = '';
+
         // Ensure direction object exists (default to clockwise: true)
         if (!state.currentTrack.direction) {
             state.currentTrack.direction = { clockwise: true };
@@ -493,85 +498,87 @@ async function loadTrack(trackId) {
             }
         }
 
-    } catch (e) {
-        console.error("Load Track Error", e);
-        alert("Failed to load track details.");
-        return;
+        const track = state.currentTrack;
+
+        // ensure curbs array exists
+        if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
+
+        // state.pitLanePoints already loaded above from API structure
+        // state.pitLanePoints = state.currentTrack._pit_path ? [...state.currentTrack._pit_path] : [];
+        state.editingMode = null;
+        state.selectedTrackPointIndex = null;
+
+        // History Init
+        if (state.currentTrack.track_geometry && state.currentTrack.track_geometry.polyline_geo) {
+            state.originalTrackGeo = JSON.parse(JSON.stringify(state.currentTrack.track_geometry.polyline_geo));
+        } else {
+            // Handle empty geometry
+            if (!state.currentTrack.track_geometry) state.currentTrack.track_geometry = { polyline_geo: [] };
+        }
+        state.trackHistory = [];
+
+        updateUIButtons();
+
+        console.log("Loaded Track:", track);
+
+        // 1. Center Map
+        if (track.center?.geo_point) {
+            map.setView([track.center.geo_point._latitude, track.center.geo_point._longitude], 16);
+        } else if (track.track_geometry?.polyline_geo && track.track_geometry.polyline_geo.length > 0) {
+            const p = track.track_geometry.polyline_geo[0];
+            map.setView([p._latitude, p._longitude], 16);
+        }
+
+        loadRefImage(track);
+
+        // 2. Render OSM Track
+        renderOSMTrack();
+
+        // 3. Set Reference Image
+        loadRefImage(track);
+
+        // 4. Render Features
+        renderFeatures();
+        renderTrackWidth();
+
+        updateFeatureList();
+        updateCurbList();
+        updateSectorList();
+
+
+        // 5. Check for Imports
+        checkForSiblingEdits(track);
+
+        // 6. Update Location Inputs
+        const addrInput = document.getElementById('track-address');
+        const latInput = document.getElementById('center-lat');
+        const lonInput = document.getElementById('center-lon');
+
+        // Address
+        let fullAddr = track.street_address || "";
+        // If we have country code but it's not in address, maybe append? 
+        // Usually street_address is enough. 
+        addrInput.value = fullAddr;
+
+        // Center
+        if (track.center && track.center.geo_point) {
+            latInput.value = track.center.geo_point._latitude.toFixed(6);
+            lonInput.value = track.center.geo_point._longitude.toFixed(6);
+        } else {
+            latInput.value = '';
+            lonInput.value = '';
+        }
+
+        // Force update Metadata Comment to ensure visibility
+        if (state.currentTrack.metadata) {
+            document.getElementById('metadata-comment').value = state.currentTrack.metadata.comment || '';
+        }
+
+    } catch (err) {
+        console.error("Error loading track:", err);
+        alert("Error loading track: " + err.message);
     } finally {
-        if (loader) loader.style.display = 'none';
-        if (select) select.disabled = false;
-    }
-
-    const track = state.currentTrack;
-
-    // ensure curbs array exists
-    if (!state.currentTrack.curbs) state.currentTrack.curbs = [];
-
-    // state.pitLanePoints already loaded above from API structure
-    // state.pitLanePoints = state.currentTrack._pit_path ? [...state.currentTrack._pit_path] : [];
-    state.editingMode = null;
-    state.selectedTrackPointIndex = null;
-
-    // History Init
-    if (state.currentTrack.track_geometry && state.currentTrack.track_geometry.polyline_geo) {
-        state.originalTrackGeo = JSON.parse(JSON.stringify(state.currentTrack.track_geometry.polyline_geo));
-    } else {
-        // Handle empty geometry
-        if (!state.currentTrack.track_geometry) state.currentTrack.track_geometry = { polyline_geo: [] };
-    }
-    state.trackHistory = [];
-
-    updateUIButtons();
-
-    console.log("Loaded Track:", track);
-
-    // 1. Center Map
-    if (track.center?.geo_point) {
-        map.setView([track.center.geo_point._latitude, track.center.geo_point._longitude], 16);
-    } else if (track.track_geometry?.polyline_geo && track.track_geometry.polyline_geo.length > 0) {
-        const p = track.track_geometry.polyline_geo[0];
-        map.setView([p._latitude, p._longitude], 16);
-    }
-
-    loadRefImage(track);
-
-    // 2. Render OSM Track
-    renderOSMTrack();
-
-    // 3. Set Reference Image
-    loadRefImage(track);
-
-    // 4. Render Features
-    renderFeatures();
-    renderTrackWidth();
-
-    updateFeatureList();
-    updateFeatureList();
-    updateCurbList();
-    updateSectorList();
-
-
-    // 5. Check for Imports
-    checkForSiblingEdits(track);
-
-    // 6. Update Location Inputs
-    const addrInput = document.getElementById('track-address');
-    const latInput = document.getElementById('center-lat');
-    const lonInput = document.getElementById('center-lon');
-
-    // Address
-    let fullAddr = track.street_address || "";
-    // If we have country code but it's not in address, maybe append? 
-    // Usually street_address is enough. 
-    addrInput.value = fullAddr;
-
-    // Center
-    if (track.center && track.center.geo_point) {
-        latInput.value = track.center.geo_point._latitude.toFixed(6);
-        lonInput.value = track.center.geo_point._longitude.toFixed(6);
-    } else {
-        latInput.value = '';
-        lonInput.value = '';
+        if (loader) loader.classList.add('hidden');
     }
 }
 
@@ -580,9 +587,10 @@ function checkForSiblingEdits(track) {
 
     const siblings = state.tracks.filter(t => t.venue === track.venue && t.track_id !== track.track_id);
     const updatedSiblings = siblings.filter(t => {
-        // Check for specific flag or heuristic
-        return t.has_been_updated === true ||
-            (t.start_finish?.geo_point || t.pit?.entry?.geo_point || t.pit?.exit?.geo_point || (t.curbs && t.curbs.length > 0) || (t.sectors && t.sectors.length > 0) || (t.turns_and_straights && t.turns_and_straights.some(turn => turn.geo_point)));
+        // Assume sibling is updated if it has the flag OR if it's new
+        // Check metadata
+        const flagged = t.metadata?.has_been_updated === true;
+        return flagged || t.isNew;
     });
 
     if (updatedSiblings.length > 0) {
@@ -609,6 +617,7 @@ function setupImportListeners() {
     document.getElementById('btn-import-confirm').addEventListener('click', () => {
 
         console.log("import");
+
 
         const select = document.getElementById('import-source-select');
         const sourceId = select.value;
@@ -659,12 +668,12 @@ function setupImportListeners() {
         }
 
         renderOSMTrack();
+        renderTrackWidth();
+        updateUIButtons();
+        updateFeatureList();
         renderFeatures();
-        updateFeatureList();
-        updateFeatureList();
         updateCurbList();
         updateSectorList();
-        updateUIButtons();
         document.getElementById('import-modal').classList.add('hidden');
     });
 }
@@ -726,13 +735,19 @@ function setupSaveListener() {
             const isNew = !!track.isNew;
             delete track.isNew; // Don't send this flag to API
 
-            track.has_been_updated = true;
+            // Update Metadata
+            if (!track.metadata) track.metadata = {};
+            track.metadata.has_been_updated = true;
+            delete track.has_been_updated; // Cleanup legacy root property
 
-            // Calculate length if geometry exists
+            // Calculate Length
             if (track.track_geometry && track.track_geometry.polyline_geo) {
                 track.length_km = calculateTrackLength(track.track_geometry.polyline_geo);
                 console.log("Calculated Length: " + track.length_km + " km");
             }
+
+            // Update list to show asterisk
+            // updateTrackSelect(); // This function is not in the provided document, so commenting out.
 
             const endpoint = isNew ? '/api-tracks-add' : '/api-tracks-update';
             const url = `${state.apiBase}${endpoint}`;
@@ -751,7 +766,8 @@ function setupSaveListener() {
 
             if (res.ok) {
                 const updatedTrack = (await res.json()).data || track; // Use returned data if available
-                state.currentTrack.has_been_updated = true;
+                if (!state.currentTrack.metadata) state.currentTrack.metadata = {};
+                state.currentTrack.metadata.has_been_updated = true;
 
                 // If it was new, we might need to update ID or refresh list? 
                 // Currently API returns the object. Ideally we update state.tracks[idx] with response.
@@ -795,8 +811,20 @@ function saveTrackHistory() {
     if (!state.currentTrack?.track_geometry?.polyline_geo) return;
     const geoCopy = JSON.parse(JSON.stringify(state.currentTrack.track_geometry.polyline_geo));
     state.trackHistory.push(geoCopy);
-    if (state.trackHistory.length > 20) state.trackHistory.shift();
+    // Limit history size
+    if (state.trackHistory.length > 50) state.trackHistory.shift();
+
+    // Enable/Disable Undo button
     updateUIButtons();
+
+    // Also, if we are modifying geometry, imply has_been_updated?
+    // We do that on Save, but maybe visual feedback?
+    // const track = state.currentTrack;
+    // if (!track.metadata?.has_been_updated) {
+    //    if (!track.metadata) track.metadata = {};
+    //    track.metadata.has_been_updated = true;
+    //    updateTrackSelect();
+    // }
 }
 
 function renderOSMTrack() {
@@ -1120,6 +1148,44 @@ function handleSectorClick(index, e) {
         setMode('DEFINE_SECTOR_END');
         updateSectorList();
     } else if (state.editingMode === 'DEFINE_SECTOR_END') {
+        const geoPoints = state.currentTrack?.track_geometry?.polyline_geo;
+        const totalPoints = geoPoints ? geoPoints.length : 0;
+
+        // Prevent Overlap Logic with Wrap-Around
+        let minDist = Infinity;
+        let targetClampIndex = -1;
+
+        if (totalPoints > 0 && state.currentTrack.sectors) {
+            state.currentTrack.sectors.forEach((s, i) => {
+                if (i === state.activeSectorIndex) return; // Skip self
+                if (typeof s.start_index === 'number') {
+                    // Calculate Forward Distance based on modular arithmetic
+                    const dist = (s.start_index - sector.start_index + totalPoints) % totalPoints;
+                    // Dist 0 implies exact same start, which shouldn't happen, but ignore/handle
+                    if (dist === 0) return;
+
+                    if (dist < minDist) {
+                        minDist = dist;
+                        targetClampIndex = s.start_index;
+                    }
+                }
+            });
+
+            // Calculate current click distance
+            const clickDist = (index - sector.start_index + totalPoints) % totalPoints;
+
+            // Strict greater than allows "touching" (clickDist == minDist is OK)
+            if (minDist !== Infinity && clickDist > minDist) {
+                console.log(`Clamping Sector End from ${index} to ${targetClampIndex} (Overlap Prevention - Wrap)`);
+                index = targetClampIndex;
+                if (typeof showToast === 'function') {
+                    showToast("Sector clamped to align with next sector.");
+                } else {
+                    alert("Sector clamped to align with next sector.");
+                }
+            }
+        }
+
         sector.end_index = index;
 
         setMode(null);
@@ -2037,6 +2103,7 @@ function setupMapInteractions() {
             if (state.layers.interaction) state.layers.interaction.clearLayers();
         }
         updateUIButtons();
+        updateFeatureList();
     });
 }
 function setupKeyboardControls() {
@@ -2147,6 +2214,21 @@ function setupEventListeners() {
         }
     });
 
+    // Metadata Controls
+    document.getElementById('metadata-status').addEventListener('change', (e) => {
+        if (state.currentTrack) {
+            if (!state.currentTrack.metadata) state.currentTrack.metadata = {};
+            state.currentTrack.metadata.status = e.target.checked ? 'DONE' : 'WIP';
+        }
+    });
+
+    document.getElementById('metadata-comment').addEventListener('input', (e) => {
+        if (state.currentTrack) {
+            if (!state.currentTrack.metadata) state.currentTrack.metadata = {};
+            state.currentTrack.metadata.comment = e.target.value;
+        }
+    });
+
     document.getElementById('btn-geocode-address').addEventListener('click', async () => {
         const addr = document.getElementById('track-address').value;
         if (!addr || !state.currentTrack) return;
@@ -2190,8 +2272,24 @@ function setupEventListeners() {
     });
 
     document.getElementById('btn-sf-line').addEventListener('click', () => setMode('SF_LINE'));
-    document.getElementById('btn-pit-entry').addEventListener('click', () => setMode('PIT_ENTRY'));
-    document.getElementById('btn-pit-exit').addEventListener('click', () => setMode('PIT_EXIT'));
+
+    const handlePitPointMode = (mode) => {
+        if (state.pitLanePoints && state.pitLanePoints.length > 0) {
+            if (confirm("Changing Pit Entry/Exit will reset the existing Pit Lane trace. Continue?")) {
+                // Clear Trace
+                state.pitLanePoints = [];
+                if (state.currentTrack.pit) state.currentTrack.pit.polyline_geo = [];
+                renderFeatures();
+                updateUIButtons();
+                setMode(mode);
+            }
+        } else {
+            setMode(mode);
+        }
+    };
+
+    document.getElementById('btn-pit-entry').addEventListener('click', () => handlePitPointMode('PIT_ENTRY'));
+    document.getElementById('btn-pit-exit').addEventListener('click', () => handlePitPointMode('PIT_EXIT'));
     document.getElementById('btn-trace-pit').addEventListener('click', () => setMode('TRACE_PIT'));
     document.getElementById('btn-edit-trace').addEventListener('click', () => {
         setMode('EDIT_TRACK');
@@ -2399,6 +2497,8 @@ function setMode(mode, turnIndex = null, curbIndex = null) {
 }
 
 function updateUIButtons() {
+
+
     document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
 
     if (state.editingMode === 'SF_LINE') document.getElementById('btn-sf-line').classList.add('active');
@@ -2457,6 +2557,21 @@ function updateUIButtons() {
         pitWidthInput.disabled = !canSetPitWidth;
         pitWidthInput.parentElement.style.opacity = canSetPitWidth ? '1' : '0.5';
 
+        // Metadata
+        const metaStatus = document.getElementById('metadata-status');
+        const metaComment = document.getElementById('metadata-comment');
+
+        metaStatus.disabled = false;
+        metaComment.disabled = false;
+
+        if (t.metadata) {
+            metaStatus.checked = (t.metadata.status === 'DONE');
+            metaComment.value = t.metadata.comment || '';
+        } else {
+            metaStatus.checked = false;
+            metaComment.value = '';
+        }
+
         // Track Edit Buttons
         document.getElementById('btn-undo-track').disabled = state.trackHistory.length === 0;
         document.getElementById('btn-delete-point').disabled = (state.selectedTrackPointIndex === null);
@@ -2497,6 +2612,9 @@ function updateUIButtons() {
             }
         });
 
+        document.getElementById('metadata-comment').disabled = true;
+        document.getElementById('metadata-status').disabled = true;
+
         document.getElementById('save-btn').disabled = true;
         document.getElementById('export-btn').disabled = true;
 
@@ -2518,6 +2636,8 @@ function updateUIButtons() {
 }
 
 function updateStatusIcon(btnId, complete) {
+
+
     const btn = document.getElementById(btnId);
     if (!btn) return;
     const icon = btn.querySelector('.status-icon');
@@ -2525,6 +2645,9 @@ function updateStatusIcon(btnId, complete) {
 }
 
 function updateFeatureList() {
+
+
+
     const list = document.getElementById('feature-list');
     list.innerHTML = '';
 
@@ -2536,9 +2659,11 @@ function updateFeatureList() {
 
         // Status Indicator
         const status = document.createElement('span');
-        status.style.width = '20px';
+        status.style.display = 'inline-block';
+        status.style.minWidth = '20px';
         status.style.textAlign = 'center';
         status.style.color = '#00ff00';
+        status.style.fontWeight = 'bold';
         status.textContent = turn.geo_point ? '✓' : '';
 
         // Editable Name Input
@@ -2570,9 +2695,27 @@ function updateFeatureList() {
             updateUIButtons(); // Refresh UI state
         });
 
+        // Delete Button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'icon-btn';
+        delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        delBtn.title = 'Delete Turn';
+        delBtn.onclick = () => {
+            if (confirm("Are you sure you want to delete this turn?")) {
+                state.currentTrack.turns_and_straights.splice(index, 1);
+                if (state.activeTurnIndex === index) {
+                    state.activeTurnIndex = null;
+                    state.editingMode = null;
+                }
+                updateFeatureList();
+                renderFeatures();
+            }
+        };
+
         div.appendChild(status);
         div.appendChild(input);
         div.appendChild(btn);
+        div.appendChild(delBtn);
         list.appendChild(div);
     });
 }
@@ -2581,6 +2724,8 @@ function updateFeatureList() {
 init();
 
 function updateSectorList() {
+
+
     const list = document.getElementById('sector-list');
     list.innerHTML = '';
 
@@ -2592,9 +2737,11 @@ function updateSectorList() {
 
         // Status Indicator
         const status = document.createElement('span');
-        status.style.minWidth = '20px'; // consistent spacing
+        status.style.display = 'inline-block';
+        status.style.minWidth = '20px';
         status.style.textAlign = 'center';
         status.style.color = '#00ff00';
+        status.style.fontWeight = 'bold';
         status.textContent = (typeof s.start_index === 'number' && typeof s.end_index === 'number') ? '✓' : '';
 
         // Name Input
@@ -2622,7 +2769,24 @@ function updateSectorList() {
             } else {
                 // Start Defining
                 state.activeSectorIndex = i;
-                setMode('DEFINE_SECTOR_START');
+
+                // Enforce Contiguous Logic
+                if (state.currentTrack.sectors.length > 1) {
+                    const prevIndex = (i - 1 + state.currentTrack.sectors.length) % state.currentTrack.sectors.length;
+                    const prevSector = state.currentTrack.sectors[prevIndex];
+
+                    if (prevSector && typeof prevSector.end_index === 'number') {
+                        s.start_index = prevSector.end_index;
+                        console.log(`Auto-locked Sector Start to Index ${s.start_index} (Contiguous Mode)`);
+                        setMode('DEFINE_SECTOR_END');
+                        if (typeof showToast === 'function') showToast("Start point locked to previous sector.");
+                    } else {
+                        // Fallback if previous sector is invalid
+                        setMode('DEFINE_SECTOR_START');
+                    }
+                } else {
+                    setMode('DEFINE_SECTOR_START');
+                }
             }
             updateUIButtons();
             updateSectorList();
@@ -2664,128 +2828,11 @@ function updateSectorList() {
     });
 }
 
-function updateUIButtons() {
-    if (!state.currentTrack) {
-        // Disable everything EXCEPT create buttons and MODAL contents
-        document.querySelectorAll('button:not(#btn-create-venue):not(#btn-create-track):not(#btn-settings)').forEach(b => {
-            // If button is inside a modal, don't disable it
-            if (!b.closest('.modal')) b.disabled = true;
-        });
 
-        document.querySelectorAll('input:not(#venue-search):not(#filter-non-modified)').forEach(i => {
-            if (!i.closest('.modal')) i.disabled = true;
-        });
-
-        document.querySelectorAll('select:not(#track-select)').forEach(s => {
-            if (!s.closest('.modal')) s.disabled = true;
-        });
-        return;
-    }
-
-    // Enable basic controls (Re-enable non-modals specifically? Or just all?)
-    // Simpler to just enable all, but respect specific disabled states like undo
-    document.querySelectorAll('button:not(#btn-undo-track):not(#btn-undo-pit):not(#btn-delete-point):not(#btn-delete-range):not(#btn-reset-track)').forEach(b => b.disabled = false);
-    document.querySelectorAll('input').forEach(i => i.disabled = false);
-    document.querySelectorAll('select').forEach(s => s.disabled = false);
-
-    // Specific Mode States
-    const setBtnState = (id, activeText) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-        const icon = btn.querySelector('.status-icon');
-        if (state.editingMode === activeText) { // Logic misuse of param name, but works for mapping
-            // But we match logic below
-        }
-    };
-
-    // Helper
-    const updateBtn = (id, mode) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-        const isActive = (state.editingMode === mode);
-        if (isActive) {
-            btn.classList.add('active');
-            btn.innerHTML = `Cancel <span class="status-icon"><i class="fa-solid fa-ban"></i></span>`;
-        } else {
-            btn.classList.remove('active');
-            // Reset text (Hardcoded for now or store original?)
-            // We'll just reset based on ID
-            if (id === 'btn-sf-line') btn.innerHTML = `Add Start/Finish Line <span class="status-icon"></span>`;
-            if (id === 'btn-pit-entry') btn.innerHTML = `Add Pit Entry <span class="status-icon"></span>`;
-            if (id === 'btn-pit-exit') btn.innerHTML = `Add Pit Exit <span class="status-icon"></span>`;
-            if (id === 'btn-trace-pit') btn.innerHTML = `Trace Pitlane <span class="status-icon"></span>`;
-            if (id === 'btn-add-turn') btn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
-            if (id === 'btn-add-curb-entry') btn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
-            if (id === 'btn-pick-center') btn.innerHTML = `<i class="fa-solid fa-map-pin"></i>`;
-            if (id === 'btn-add-sector') btn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
-        }
-    };
-
-    updateBtn('btn-sf-line', 'SF_LINE');
-    updateBtn('btn-pit-entry', 'PIT_ENTRY');
-    updateBtn('btn-pit-exit', 'PIT_EXIT');
-    updateBtn('btn-trace-pit', 'TRACE_PIT');
-    updateBtn('btn-pick-center', 'DEFINE_CENTER');
-
-    // Turn Button State
-    const btnTurn = document.getElementById('btn-add-turn');
-    if (state.editingMode === 'TURN_POINT') {
-        btnTurn.classList.add('active');
-        btnTurn.innerHTML = `<i class="fa-solid fa-ban"></i>`;
-    } else {
-        btnTurn.classList.remove('active');
-        btnTurn.innerHTML = `<i class="fa-solid fa-plus"></i>`;
-    }
-
-    // Curb Button State
-    const btnCurb = document.getElementById('btn-add-curb-entry');
-    if (state.editingMode === 'DEFINE_CURB_START' || state.editingMode === 'DEFINE_CURB_END') {
-        btnCurb.classList.add('active');
-        btnCurb.innerHTML = (state.editingMode === 'DEFINE_CURB_START') ? 'Start...' : 'End...';
-        if (state.editingMode === 'DEFINE_CURB_END') btnCurb.classList.add('flashing'); else btnCurb.classList.remove('flashing');
-    } else {
-        btnCurb.classList.remove('active');
-        btnCurb.classList.remove('flashing');
-        btnCurb.innerHTML = `<i class="fa-solid fa-plus"></i>`;
-    }
-
-    // Sector Button State
-    const btnSector = document.getElementById('btn-add-sector');
-    if (state.editingMode === 'DEFINE_SECTOR_START' || state.editingMode === 'DEFINE_SECTOR_END') {
-        btnSector.classList.add('active');
-        btnSector.innerHTML = (state.editingMode === 'DEFINE_SECTOR_START') ? 'Start...' : 'End...';
-        if (state.editingMode === 'DEFINE_SECTOR_END') btnSector.classList.add('flashing'); else btnSector.classList.remove('flashing');
-    } else {
-        btnSector.classList.remove('active');
-        btnSector.classList.remove('flashing');
-        btnSector.innerHTML = `<i class="fa-solid fa-plus"></i>`;
-    }
-
-    // Edit Track Buttons
-    const btnEdit = document.getElementById('btn-edit-trace');
-    if (state.editingMode === 'EDIT_TRACK') {
-        btnEdit.classList.add('active');
-        btnEdit.textContent = "Exit Edit Mode";
-        document.getElementById('btn-undo-track').disabled = false;
-        document.getElementById('btn-delete-point').disabled = (state.selectedTrackPointIndex === null);
-        document.getElementById('btn-delete-range').disabled = false;
-    } else if (state.editingMode === 'DELETE_RANGE') {
-        btnEdit.textContent = "Edit Track Geometry";
-        btnEdit.disabled = true; // Cannot switch directly?
-        document.getElementById('btn-delete-range').classList.add('active');
-    } else {
-        btnEdit.classList.remove('active');
-        btnEdit.textContent = "Toggle Edit Track Geometry Mode"; // Fixed Label
-        document.getElementById('btn-undo-track').disabled = true;
-        document.getElementById('btn-delete-point').disabled = true;
-        document.getElementById('btn-delete-range').disabled = true;
-        document.getElementById('btn-delete-range').classList.remove('active');
-    }
-    // Always enable Reset if track exists
-    document.getElementById('btn-reset-track').disabled = false;
-}
 
 function updateCurbList() {
+
+
     const list = document.getElementById('curb-list');
     if (!list) return;
     list.innerHTML = '';
@@ -2795,31 +2842,15 @@ function updateCurbList() {
     state.currentTrack.curbs.forEach((c, index) => {
         const div = document.createElement('div');
         div.className = 'feature-row';
-        div.style.display = 'grid';
-        div.style.gridTemplateColumns = '20px 1fr auto auto';
-        div.style.gap = '5px';
-        div.style.alignItems = 'center';
-        div.style.padding = '5px';
-        div.style.borderRadius = '4px';
-        div.style.cursor = 'default';
 
-        div.onmouseenter = () => {
-            state.highlightedCurbIndex = index;
-            renderFeatures();
-            div.style.backgroundColor = '#333';
-        };
-        div.onmouseleave = () => {
-            state.highlightedCurbIndex = null;
-            renderFeatures();
-            div.style.backgroundColor = 'transparent';
-        };
-
-        const status = document.createElement('span');
-        status.style.color = '#00ff00';
-        status.style.fontSize = '12px';
         const isComplete = (c.start_index !== null && c.end_index !== null);
-        status.textContent = isComplete ? '✓' : '•';
-        status.style.color = isComplete ? '#00ff00' : '#666';
+        const status = document.createElement('span');
+        status.style.display = 'inline-block';
+        status.style.minWidth = '20px';
+        status.style.textAlign = 'center';
+        status.style.color = '#00ff00';
+        status.style.fontWeight = 'bold';
+        status.textContent = isComplete ? '✓' : '';
 
         const input = document.createElement('input');
         input.type = 'text';
